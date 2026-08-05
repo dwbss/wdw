@@ -61,25 +61,35 @@ async function callClaude(prompt, tools, withFetchBeta) {
   };
   if (withFetchBeta) headers['anthropic-beta'] = 'web-fetch-2025-09-10';
 
-  let messages = [{ role: 'user', content: prompt }];
+  // cache_control: repeated context on continuation turns is re-read at ~10% price
+  let messages = [{ role: 'user', content: [{ type: 'text', text: prompt, cache_control: { type: 'ephemeral' } }] }];
   let collected = '';
   let last = null;
-  for (let i = 0; i < 5; i++) {
+  let cost = { in: 0, out: 0, cacheRead: 0, cacheWrite: 0 };
+  for (let i = 0; i < 3; i++) {
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers,
-      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 5000, messages, tools })
+      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 3500, messages, tools })
     });
     last = await r.json();
     if (last.error) return { error: last.error };
     collected += (last.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
-    console.log(`claude turn ${i}: stop=${last.stop_reason}, text so far=${collected.length} chars`);
+    const u = last.usage || {};
+    cost.in += u.input_tokens || 0;
+    cost.out += u.output_tokens || 0;
+    cost.cacheRead += u.cache_read_input_tokens || 0;
+    cost.cacheWrite += u.cache_creation_input_tokens || 0;
+    console.log(`claude turn ${i}: stop=${last.stop_reason}, text=${collected.length} chars, in=${u.input_tokens||0}, out=${u.output_tokens||0}, cacheRead=${u.cache_read_input_tokens||0}, cacheWrite=${u.cache_creation_input_tokens||0}`);
     if (last.stop_reason === 'pause_turn') {
       messages = [...messages, { role: 'assistant', content: last.content }];
       continue;
     }
     break;
   }
+  // rough cost estimate at Sonnet rates ($3/M in, $15/M out, $0.30/M cache read, $3.75/M cache write)
+  const usd = (cost.in * 3 + cost.out * 15 + cost.cacheRead * 0.3 + cost.cacheWrite * 3.75) / 1e6;
+  console.log(`search cost ~$${usd.toFixed(3)} (tokens in=${cost.in} out=${cost.out} cached=${cost.cacheRead})`);
   return { text: collected, stop_reason: last ? last.stop_reason : 'unknown' };
 }
 
@@ -367,14 +377,14 @@ Keep it compact. Only include options genuinely available ${dayWord}.`;
     const searchTool = {
       type: 'web_search_20250305',
       name: 'web_search',
-      max_uses: n === 1 ? 3 : 6,
+      max_uses: n === 1 ? 3 : 5,
       user_location: { type: 'approximate', country: 'GB', timezone: 'Europe/London' }
     };
     const fetchTool = {
       type: 'web_fetch_20250910',
       name: 'web_fetch',
-      max_uses: n === 1 ? 2 : 3,
-      max_content_tokens: 15000
+      max_uses: n === 1 ? 1 : 2,
+      max_content_tokens: 6000
     };
 
     let data = await callClaude(prompt, [searchTool, fetchTool], true);
