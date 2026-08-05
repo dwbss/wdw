@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Why Don't We? — Find something brilliant to do today</title>
+<meta name="description" content="Spin the wheels, find brilliant things to do with the kids today — near you, right now.">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f7f6f2">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Manrope:ital,wght@0,400;0,500;0,600;0,700;0,800;1,500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f7f6f2;
+    --surface:#ffffff;
+    --ink:#1b2024;
+    --ink-soft:#5d666b;
+    --line:#e6e4dd;
+    --accent:#2557e0;        /* cobalt */
+    --accent-deep:#1a41ad;
+    --accent-soft:#eef2fd;
+    --sun:#f6b73c;           /* sunshine */
+    --coral:#ff6752;         /* playful warm accent */
+    --mint-soft:#e2f7ef;
+    --mint-deep:#0e7a5f;
+    --gem:#b4690e;
+    --gem-soft:#fdf3e3;
+    --radius:16px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:'Manrope',system-ui,sans-serif;
+    background:
+      radial-gradient(700px 320px at 85% -60px, #fdeecb 0%, transparent 65%),
+      radial-gradient(700px 340px at 0% -80px, #dfe8fd 0%, transparent 60%),
+      var(--bg);
+    color:var(--ink);
+    min-height:100vh;display:flex;flex-direction:column;align-items:center;
+    padding:40px 16px 72px;
+  }
+  .wrap{width:100%;max-width:520px}
+
+  header h1{
+    font-family:'Sora',sans-serif;font-weight:800;
+    font-size:clamp(30px,7vw,40px);letter-spacing:-.025em;line-height:1.08;
+  }
+  header h1 .q{color:var(--coral);display:inline-block;transform:rotate(8deg)}
+  header p{color:var(--ink-soft);margin-top:8px;font-size:15.5px;font-weight:600}
+
+  .panel{
+    margin-top:28px;background:var(--surface);
+    border:1.5px solid var(--line);border-radius:22px;
+    padding:22px 20px 24px;
+    box-shadow:0 12px 32px -18px rgba(27,32,36,.18);
+  }
+  label.small{
+    display:block;font-size:12px;font-weight:800;letter-spacing:.09em;
+    text-transform:uppercase;color:var(--ink-soft);margin:0 0 8px;
+  }
+  .field + label.small{margin-top:22px}
+  input#loc{
+    width:100%;font:inherit;font-weight:700;font-size:16px;
+    text-transform:uppercase;
+    padding:13px 15px;border-radius:var(--radius);
+    border:1.5px solid var(--line);background:var(--bg);color:var(--ink);outline:none;
+    transition:border-color .15s, background .15s;
+  }
+  input#loc:focus{border-color:var(--accent);background:var(--surface)}
+  input#loc::placeholder{font-size:12.5px;font-weight:600;letter-spacing:.05em;color:#a9aeb0}
+  .locate{
+    display:inline-flex;align-items:center;gap:6px;margin-top:9px;
+    font:inherit;font-weight:800;font-size:13.5px;color:var(--accent);
+    background:none;border:none;cursor:pointer;padding:2px 0;
+  }
+  .locate:hover{text-decoration:underline}
+  .locate:disabled{opacity:.6;cursor:wait;text-decoration:none}
+  .locate:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+  .locate svg{width:15px;height:15px}
+
+  /* ---- spinner pickers ---- */
+  .spinners{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:22px}
+  .spinner-wrap{text-align:center}
+  .spinner-label{font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:7px}
+  .spinner{
+    position:relative;height:118px;border-radius:14px;overflow:hidden;cursor:pointer;
+    background:linear-gradient(180deg,#e9e7e0 0%, #fdfdfb 30%, #fdfdfb 70%, #e9e7e0 100%);
+    border:1.5px solid var(--line);
+    box-shadow:inset 0 10px 14px -8px rgba(27,32,36,.22), inset 0 -10px 14px -8px rgba(27,32,36,.22);
+    -webkit-tap-highlight-color:transparent;user-select:none;
+  }
+  .spinner:focus-visible{outline:2.5px solid var(--accent);outline-offset:2px}
+  .spinner .window{
+    position:absolute;left:6px;right:6px;top:50%;height:38px;transform:translateY(-50%);
+    border-radius:10px;background:var(--accent-soft);
+    border:1.5px solid var(--accent);pointer-events:none;z-index:1;
+  }
+  .spinner .strip{
+    position:absolute;left:0;right:0;top:50%;margin-top:-19px; /* center row aligns with window */
+    transition:transform .28s cubic-bezier(.3,1.1,.4,1);will-change:transform;z-index:2;
+  }
+  .spinner .strip.long{transition:transform .55s cubic-bezier(.2,.9,.3,1)}
+  @media (prefers-reduced-motion:reduce){.spinner .strip,.spinner .strip.long{transition:none}}
+  .spinner .row{
+    height:38px;display:flex;align-items:center;justify-content:center;gap:5px;
+    font-weight:800;font-size:14.5px;color:var(--ink-soft);opacity:.38;
+    transition:opacity .2s, color .2s;
+  }
+  .spinner .row.active{opacity:1;color:var(--accent-deep)}
+  .spinner .row .em{font-size:15px}
+  .spinner-hint{font-size:11px;color:var(--ink-soft);opacity:.75;margin-top:6px;font-weight:600}
+
+  button.primary{
+    width:100%;margin-top:24px;
+    font-family:'Sora',sans-serif;font-weight:700;font-size:16.5px;letter-spacing:-.01em;
+    color:#fff;background:linear-gradient(180deg,var(--accent),var(--accent-deep));
+    border:none;border-radius:var(--radius);padding:16px;cursor:pointer;
+    box-shadow:0 8px 20px -10px rgba(37,87,224,.7);
+    transition:transform .05s, box-shadow .15s, opacity .15s;
+  }
+  button.primary:hover{box-shadow:0 10px 24px -10px rgba(37,87,224,.8)}
+  button.primary:active{transform:scale(.985)}
+  button.primary:disabled{opacity:.55;cursor:wait;transform:none}
+  .dayrow{display:flex;gap:0;margin-top:20px;background:var(--bg);border:1.5px solid var(--line);border-radius:999px;padding:3px}
+  .dayrow .day{flex:1;font:inherit;font-weight:800;font-size:13.5px;padding:9px;border:none;border-radius:999px;background:none;color:var(--ink-soft);cursor:pointer;transition:background .15s,color .15s}
+  .dayrow .day.on{background:var(--accent);color:#fff}
+  .dayrow .day:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .quick{margin-top:24px}
+  .quick h4{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:9px}
+  .quick .chips{display:flex;gap:7px;flex-wrap:wrap}
+  .qv{font:inherit;font-weight:700;font-size:12.5px;color:var(--ink);background:var(--surface);border:1.5px solid var(--line);border-radius:999px;padding:7px 12px;cursor:pointer;text-decoration:none;transition:border-color .15s}
+  .qv:hover{border-color:var(--accent)}
+  .qv .t{color:var(--ink-soft);font-weight:600}
+  button:focus-visible{outline:2.5px solid var(--sun);outline-offset:3px}
+
+  .stage{margin-top:32px}
+  .loading{
+    text-align:center;padding:40px 16px;border:1.5px dashed var(--line);
+    border-radius:var(--radius);color:var(--ink-soft);font-weight:700;background:var(--surface);
+  }
+  .bounce{display:flex;gap:7px;justify-content:center;margin-bottom:14px}
+  .bounce span{width:11px;height:11px;border-radius:50%;animation:hop 1s ease-in-out infinite}
+  .bounce span:nth-child(1){background:var(--accent)}
+  .bounce span:nth-child(2){background:var(--sun);animation-delay:.15s}
+  .bounce span:nth-child(3){background:var(--coral);animation-delay:.3s}
+  @keyframes hop{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+  @media (prefers-reduced-motion:reduce){.bounce span{animation:none}}
+  @keyframes pulse{0%,100%{transform:scale(.7);opacity:.5}50%{transform:scale(1.3);opacity:1}}
+  @media (prefers-reduced-motion:reduce){.loading .orb{animation:none}}
+
+  .results-head{margin-bottom:14px}
+  .results-head h2{font-family:'Sora',sans-serif;font-size:20px;font-weight:700;letter-spacing:-.01em}
+  .results-head p{color:var(--ink-soft);font-size:13.5px;font-weight:600;margin-top:3px}
+
+  .card{
+    background:var(--surface);border:1.5px solid var(--line);border-radius:var(--radius);
+    padding:16px;margin-bottom:12px;box-shadow:0 6px 18px -14px rgba(27,32,36,.25);
+  }
+  .card.gem{border-color:var(--gem);background:linear-gradient(0deg,var(--gem-soft) 0,var(--surface) 55%)}
+  .card .top{display:flex;gap:10px;align-items:flex-start;justify-content:space-between}
+  .card h3{font-size:16.5px;font-weight:800;line-height:1.3;letter-spacing:-.01em}
+  .gem-badge{
+    flex:0 0 auto;font-size:11px;font-weight:800;letter-spacing:.04em;
+    color:var(--gem);background:var(--gem-soft);border:1px solid var(--gem);
+    padding:3px 9px;border-radius:999px;white-space:nowrap;
+  }
+  .card p{margin-top:6px;font-size:14px;line-height:1.5;color:var(--ink-soft);font-weight:500}
+  .meta{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+  .tag{
+    font-size:12px;font-weight:700;padding:4px 10px;border-radius:999px;
+    background:var(--bg);border:1px solid var(--line);color:var(--ink-soft);
+  }
+  .tag.free{background:var(--accent-soft);border-color:transparent;color:var(--accent)}
+  .card a.book{
+    display:inline-flex;align-items:center;gap:5px;margin-top:12px;
+    font-weight:800;font-size:14px;color:var(--accent);text-decoration:none;
+  }
+  .card a.book:hover{text-decoration:underline}
+  .card .bottom{display:flex;align-items:center;margin-top:12px}
+  .card .bottom a.book{margin-top:0}
+  .card .bottom .save{margin-left:auto}
+  .card .bottom .report,.card .bottom .dismiss{margin-left:8px}
+  .report{
+    flex:0 0 auto;width:30px;height:30px;border-radius:8px;cursor:pointer;
+    background:none;border:1.5px solid var(--line);color:var(--ink-soft);
+    display:inline-flex;align-items:center;justify-content:center;
+    transition:color .15s, border-color .15s, background .15s;
+  }
+  .report:hover{color:#c0392b;border-color:#e0b4b4;background:#fdf3f3}
+  .report:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .report svg{width:15px;height:15px;pointer-events:none}
+  .save{
+    flex:0 0 auto;width:30px;height:30px;border-radius:8px;cursor:pointer;
+    background:none;border:1.5px solid var(--line);color:var(--ink-soft);
+    display:inline-flex;align-items:center;justify-content:center;
+    transition:color .15s, border-color .15s, background .15s;
+  }
+  .save:hover{color:var(--accent);border-color:var(--accent)}
+  .save.on{color:#fff;background:var(--accent);border-color:var(--accent)}
+  .save:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .save svg{width:15px;height:15px;pointer-events:none}
+  .favbtn{
+    display:flex;align-items:center;gap:5px;width:fit-content;
+    margin:8px 0 -16px auto; /* right-aligned, tight to the panel */
+    font:inherit;font-weight:800;font-size:12px;color:var(--accent);
+    background:var(--surface);border:1.5px solid var(--line);border-radius:999px;
+    padding:4px 10px;cursor:pointer;transition:border-color .15s;
+  }
+  .favbtn:hover{border-color:var(--accent)}
+  .favbtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .backbtn{
+    display:block;width:100%;margin-top:6px;font:inherit;font-weight:800;font-size:15px;
+    background:var(--surface);border:1.5px solid var(--line);color:var(--ink);
+    border-radius:var(--radius);padding:14px;cursor:pointer;transition:border-color .15s;
+  }
+  .backbtn:hover{border-color:#c8c6be}
+
+  /* report modal */
+  .modal-backdrop{position:fixed;inset:0;background:rgba(20,25,28,.45);display:flex;align-items:center;justify-content:center;z-index:50;padding:20px}
+  .modal-backdrop[hidden]{display:none}
+  .modal{background:var(--surface);border-radius:18px;padding:20px;max-width:340px;width:100%;border:1.5px solid var(--line);box-shadow:0 24px 60px -24px rgba(0,0,0,.45)}
+  .modal h3{font-family:'Sora',sans-serif;font-size:16px;font-weight:700;letter-spacing:-.01em;margin-bottom:14px}
+  .mopt{display:block;width:100%;text-align:left;font:inherit;font-weight:700;font-size:14px;padding:12px 14px;border:1.5px solid var(--line);border-radius:12px;background:var(--bg);color:var(--ink);margin-bottom:8px;cursor:pointer;transition:border-color .15s,background .15s}
+  .mopt:hover{border-color:#c0392b;background:#fdf3f3}
+  .mopt:focus-visible,.mcancel:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .mcancel{display:block;width:100%;font:inherit;font-weight:700;font-size:13.5px;padding:10px;border:none;background:none;color:var(--ink-soft);cursor:pointer;margin-top:2px}
+
+  .card{transition:opacity .25s ease, transform .25s ease}
+  .card.leaving{opacity:0;transform:translateX(24px)}
+  .dismiss{
+    flex:0 0 auto;width:30px;height:30px;border-radius:8px;cursor:pointer;
+    background:none;border:1.5px solid var(--line);color:var(--ink-soft);
+    display:inline-flex;align-items:center;justify-content:center;
+    transition:color .15s, border-color .15s, background .15s;
+  }
+  .dismiss:hover{color:#c0392b;border-color:#e0b4b4;background:#fdf3f3}
+  .dismiss:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .dismiss svg{width:15px;height:15px;pointer-events:none}
+  .ghost{
+    border:1.5px dashed var(--line);border-radius:var(--radius);background:var(--surface);
+    padding:22px 16px;margin-bottom:12px;text-align:center;
+    color:var(--ink-soft);font-weight:700;font-size:13.5px;transition:opacity .3s;
+  }
+  .ghost .orb{
+    width:9px;height:9px;border-radius:50%;background:var(--accent);
+    display:inline-block;margin-right:8px;vertical-align:1px;
+    animation:pulse 1s ease-in-out infinite;
+  }
+
+  #more{
+    display:block;width:100%;margin-top:6px;font:inherit;font-weight:800;font-size:15px;
+    background:var(--surface);border:1.5px solid var(--line);color:var(--ink);
+    border-radius:var(--radius);padding:14px;cursor:pointer;transition:border-color .15s;
+  }
+  #more:hover{border-color:#c8c6be}
+  #more:disabled{opacity:.55;cursor:wait}
+  .dig-note{text-align:center;font-size:12.5px;color:var(--ink-soft);font-weight:600;margin-top:10px}
+
+  .error{
+    border:1.5px solid #e0b4b4;background:#fdf3f3;border-radius:var(--radius);
+    padding:18px;font-weight:600;font-size:14px;color:#7c2d2d;
+  }
+  .error button{
+    display:block;margin-top:10px;font:inherit;font-weight:800;font-size:14px;
+    background:var(--ink);color:#fff;border:none;border-radius:10px;
+    padding:9px 16px;cursor:pointer;
+  }
+  footer{margin-top:40px;font-size:12px;color:var(--ink-soft);opacity:.8;max-width:460px;line-height:1.5}
+
+  /* narrow phones */
+  @media (max-width:380px){
+    body{padding:28px 12px 60px}
+    .panel{padding:18px 14px 20px}
+    .spinners{gap:8px}
+    .spinner .row{font-size:12.5px;gap:4px}
+    .spinner .row .em{font-size:13px}
+    .spinner .window{left:4px;right:4px}
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>Why don't we<span class="q">?</span></h1>
+    <p>Designed for parents who are looking for fun things to do with the kids today.</p>
+    <button class="favbtn" id="favBtn" hidden>♥ Favourites (0)</button>
+  </header>
+
+  <div class="panel">
+    <div class="field">
+      <label class="small" for="loc">Where are you?</label>
+      <input id="loc" type="text" placeholder="Town or postcode" autocomplete="off">
+      <button class="locate" id="locate">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="8"/></svg>
+        <span id="locateTxt">Find my location</span>
+      </button>
+    </div>
+
+    <div class="spinners">
+      <div class="spinner-wrap">
+        <div class="spinner-label">Cost</div>
+        <div class="spinner" id="sp-cost" role="button" tabindex="0" aria-label="Cost spinner, tap to change"></div>
+        <div class="spinner-hint">tap to spin</div>
+      </div>
+      <div class="spinner-wrap">
+        <div class="spinner-label">Distance</div>
+        <div class="spinner" id="sp-dist" role="button" tabindex="0" aria-label="Distance spinner, tap to change"></div>
+        <div class="spinner-hint">tap to spin</div>
+      </div>
+      <div class="spinner-wrap">
+        <div class="spinner-label">Setting</div>
+        <div class="spinner" id="sp-set" role="button" tabindex="0" aria-label="Setting spinner, tap to change"></div>
+        <div class="spinner-hint">tap to spin</div>
+      </div>
+    </div>
+
+    <div class="dayrow" role="group" aria-label="Which day">
+      <button class="day on" data-day="today">Today</button>
+      <button class="day" data-day="tomorrow">Tomorrow</button>
+    </div>
+
+    <button class="primary" id="go">Things to do today</button>
+  </div>
+
+  <div class="quick" id="quickZone" hidden></div>
+
+  <div class="stage" id="stage" aria-live="polite"></div>
+
+  <footer>Results are found live on the web for today's date. Always check times and availability on the venue's page before heading out.</footer>
+<div class="modal-backdrop" id="reportModal" hidden>
+  <div class="modal" role="dialog" aria-label="Report a problem with this result">
+    <h3>What's wrong with this one?</h3>
+    <button class="mopt" data-reason="inappropriate">Not appropriate for families</button>
+    <button class="mopt" data-reason="dead_link">The link doesn't work</button>
+    <button class="mopt" data-reason="not_on">This event isn't on / no longer exists</button>
+    <button class="mcancel">Cancel</button>
+  </div>
+</div>
+
+</div>
+
+<script>
+const ROW = 38;
+const SPINNERS = {
+  cost: { options:[
+    {em:'🆓', txt:'Free', val:'free things only'},
+    {em:'💷', txt:'Paid', val:'paid activities are fine'},
+    {em:'🎲', txt:'Either', val:'free or paid'}
+  ], idx:2 },
+  dist: { options:[
+    {em:'🚲', txt:'5 miles', val:'within 5 miles'},
+    {em:'🚗', txt:'10 miles', val:'within 10 miles'},
+    {em:'🛣️', txt:'25 miles', val:'within 25 miles'}
+  ], idx:1 },
+  set: { options:[
+    {em:'🏠', txt:'Indoors', val:'indoor'},
+    {em:'🌳', txt:'Outdoors', val:'outdoor'},
+    {em:'⛅', txt:'Either', val:'indoor or outdoor'}
+  ], idx:2 }
+};
+
+function buildSpinner(key, elId){
+  const s = SPINNERS[key];
+  s.el = document.getElementById(elId);
+  const strip = document.createElement('div');
+  strip.className='strip';
+  const reps = 12; // long strip so we can always keep spinning downwards visually
+  for(let r=0;r<reps;r++){
+    s.options.forEach((o,i)=>{
+      const row=document.createElement('div');
+      row.className='row';
+      row.dataset.opt=i;
+      row.innerHTML=`<span class="em">${o.em}</span>${o.txt}`;
+      strip.appendChild(row);
+    });
+  }
+  const win=document.createElement('div');win.className='window';
+  s.el.appendChild(strip); s.el.appendChild(win);
+  s.strip=strip;
+  s.pos = s.options.length*6 + s.idx;
+  paint(s,false);
+  const advance = ()=>{
+    s.pos++; s.idx = s.pos % s.options.length;
+    paint(s,false);
+    clearTimeout(s.recenter);
+    s.recenter=setTimeout(()=>{ s.pos = s.options.length*6 + s.idx; paint(s,true); }, 400);
+  };
+  s.el.addEventListener('click', advance);
+  s.el.addEventListener('keydown', e=>{ if(e.key==='Enter'||e.key===' '){e.preventDefault();advance();} });
+}
+function paint(s, instant){
+  if(instant){ s.strip.style.transition='none'; }
+  s.strip.style.transform=`translateY(${-s.pos*ROW}px)`;
+  if(instant){ void s.strip.offsetHeight; s.strip.style.transition=''; }
+  s.strip.querySelectorAll('.row').forEach((r,abs)=>{
+    r.classList.toggle('active', abs===s.pos);
+  });
+}
+buildSpinner('cost','sp-cost'); buildSpinner('dist','sp-dist'); buildSpinner('set','sp-set');
+
+/* ---- geolocation ---- */
+const locBtn=document.getElementById('locate');
+const locTxt=document.getElementById('locateTxt');
+
+// Locate the user: proper GPS first, then permission-free IP lookup as fallback
+function gpsLocate(){
+  return new Promise((resolve,reject)=>{
+    if(!navigator.geolocation) return reject(new Error('unsupported'));
+    navigator.geolocation.getCurrentPosition(async pos=>{
+      const {latitude, longitude}=pos.coords;
+      try{
+        const r=await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`);
+        const d=await r.json();
+        resolve(d.city||d.locality||d.principalSubdivision||`${latitude.toFixed(3)}, ${longitude.toFixed(3)}`);
+      }catch{
+        resolve(`${latitude.toFixed(3)}, ${longitude.toFixed(3)}`);
+      }
+    }, ()=>reject(new Error('denied')), {enableHighAccuracy:false, timeout:8000});
+  });
+}
+async function ipLocate(){
+  for(const u of ['https://ipapi.co/json/','https://ipwho.is/']){
+    try{
+      const r=await fetch(u);
+      const d=await r.json();
+      const place=d.city||d.region||d.region_name;
+      if(place) return place;
+    }catch(e){ console.error('WDW ip lookup failed:', u, e); }
+  }
+  throw new Error('location unavailable');
+}
+async function getLocation(){
+  try{ return await gpsLocate(); }
+  catch{ return await ipLocate(); }
+}
+
+locBtn.addEventListener('click', async ()=>{
+  locBtn.disabled=true; locTxt.textContent='Locating…';
+  try{
+    document.getElementById('loc').value = await getLocation();
+    locTxt.textContent='Find my location';
+  }catch{
+    locTxt.textContent='Couldn\u2019t get your location — type it instead';
+  }
+  locBtn.disabled=false;
+});
+
+/* ---- search ---- */
+let shown=[], depth=0, lastCtx=null, day='today';
+
+document.querySelectorAll('.dayrow .day').forEach(b=>{
+  b.addEventListener('click', ()=>{
+    day=b.dataset.day;
+    document.querySelectorAll('.dayrow .day').forEach(x=>x.classList.toggle('on', x===b));
+    goBtn.textContent = day==='today' ? 'Things to do today' : 'Things to do tomorrow';
+  });
+});
+const stage=document.getElementById('stage');
+const goBtn=document.getElementById('go');
+const LOADING=[
+  ['Checking what\u2019s on today\u2026','Looking at local venues\u2026','Sorting the best options\u2026'],
+  ['Digging into local listings\u2026','Checking parish and council pages\u2026','Hunting for the small stuff\u2026'],
+  ['Going deeper\u2026','Searching village halls and local news\u2026','Finding the ones nobody advertises\u2026']
+];
+
+goBtn.addEventListener('click', ()=>{ shown=[]; depth=0; findFun(false); });
+
+async function findFun(append){
+  if(!append){ inFavs=false; prevStageHTML=null; }
+  let loc=document.getElementById('loc').value.trim();
+  if(!loc){
+    // no location typed — quietly find where they are and use that
+    locTxt.textContent='Locating…';
+    try{
+      loc=await getLocation();
+      document.getElementById('loc').value=loc;
+      locTxt.textContent='Find my location';
+    }catch{
+      locTxt.textContent='Find my location';
+      document.getElementById('loc').focus();
+      document.getElementById('loc').placeholder='Add your town or postcode first';
+      return;
+    }
+  }
+
+  goBtn.disabled=true;
+  const moreBtn=document.getElementById('more'); if(moreBtn) moreBtn.disabled=true;
+
+  const lines=LOADING[Math.min(depth,2)];
+  let li=0;
+  const loadEl=document.createElement('div');
+  loadEl.className='loading';
+  loadEl.innerHTML=`<div class="bounce"><span></span><span></span><span></span></div><div id="loadline">${lines[0]}</div>`;
+  if(append){ stage.querySelector('.more-zone')?.replaceChildren(loadEl); }
+  else{ stage.replaceChildren(loadEl); }
+  const ticker=setInterval(()=>{ li=(li+1)%lines.length; const p=document.getElementById('loadline'); if(p)p.textContent=lines[li]; },2600);
+
+  const target=new Date(Date.now()+(day==='tomorrow'?86400000:0));
+  const today=target.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  lastCtx={loc,today,dayLabel: day==='today'?'Today':'Tomorrow'};
+
+  // instant layer: nearby mapped venues appear while the deep search runs
+  if(!append) loadQuickVenues(loc);
+
+  const COST_KEYS=['free','paid','either'];
+  const DIST_KEYS=['5','10','25'];
+  const SET_KEYS=['indoor','outdoor','either'];
+
+  try{
+    let response, data;
+    try{
+      response=await fetch('/api/find',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          loc,
+          cost: COST_KEYS[SPINNERS.cost.idx],
+          dist: DIST_KEYS[SPINNERS.dist.idx],
+          setting: SET_KEYS[SPINNERS.set.idx],
+          depth,
+          excluded: shown,
+          day
+        })
+      });
+    }catch(e){ console.error('WDW network phase:', e); throw new Error('network: '+(e&&e.message?e.message:String(e))); }
+    try{ data=await response.json(); }
+    catch(e){ console.error('WDW parse phase:', e); throw new Error('The server had a hiccup — try again'); }
+    if(!response.ok || data.error) throw new Error(data.error||'Search failed — try again');
+
+    let items=(data.items||[]).filter(it=>!shown.includes(it.name)).slice(0,7);
+    if(items.length===0) throw new Error('No results came back — try again');
+    items.forEach(it=>shown.push(it.name));
+    depth++;
+
+    clearInterval(ticker);
+    try{ renderResults(items, append); }
+    catch(e){ console.error('WDW display phase:', e); throw new Error('display: '+(e&&e.message?e.message:String(e))); }
+  }catch(err){
+    clearInterval(ticker);
+    console.error('WDW error:', err);
+    const errEl=document.createElement('div');
+    errEl.className='error';
+    errEl.innerHTML=`Something went wrong: ${escapeHtml(err&&err.message?err.message:String(err))}<button id="retry">Try again</button>`;
+    if(append){ stage.querySelector('.more-zone')?.replaceChildren(errEl); }
+    else{ stage.replaceChildren(errEl); }
+    document.getElementById('retry').addEventListener('click',()=>findFun(append));
+  }finally{
+    goBtn.disabled=false;
+  }
+}
+
+async function loadQuickVenues(loc){
+  const zone=document.getElementById('quickZone');
+  zone.hidden=true; zone.innerHTML='';
+  try{
+    const r=await fetch('/api/find',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ loc, cost:'either', dist: ['5','10','25'][SPINNERS.dist.idx], setting:'either', mode:'quick' })
+    });
+    const d=await r.json();
+    const vs=(d.venues||[]);
+    if(!vs.length) return;
+    zone.innerHTML=`<h4>Nearby family venues — while we search</h4>
+      <div class="chips">${vs.map(v=>{
+        const q=encodeURIComponent(v.name+' near '+loc);
+        return `<a class="qv" href="https://www.google.com/maps/search/?api=1&query=${q}" target="_blank" rel="noopener">${escapeHtml(v.name)} <span class="t">· ${escapeHtml(v.type)}${v.miles!=null?` · ${v.miles}mi`:''}</span></a>`;
+      }).join('')}</div>`;
+    zone.hidden=false;
+  }catch{ /* quick layer is a bonus — fail silently */ }
+}
+
+function cardHtml(it){
+  if(it && it.name) RESULTS[it.name]=it;
+  const saved=(typeof FAVS!=='undefined')&&FAVS.has(it.name);
+  const freeClass=/free/i.test(it.cost||'')?'tag free':'tag';
+  const url=safeUrl(it.url);
+  return `<div class="card ${it.gem?'gem':''}" data-name="${escapeHtml(it.name||'')}">
+    <div class="top">
+      <h3>${escapeHtml(it.name||'Mystery outing')}</h3>
+      ${it.gem?'<span class="gem-badge">✨ Hidden gem</span>':''}
+    </div>
+    <p>${escapeHtml(it.blurb||'')}</p>
+    <div class="meta">
+      <span class="${freeClass}">${escapeHtml(it.cost||'—')}</span>
+      <span class="tag">${escapeHtml(it.setting||'—')}</span>
+      <span class="tag">${escapeHtml(it.area||'')}</span>
+      <span class="tag">${escapeHtml(it.time||'Check times')}</span>
+    </div>
+    <div class="bottom">
+      ${url?`<a class="book" href="${url}" target="_blank" rel="noopener">Details &amp; booking →</a>`:''}
+      <button class="save${saved?' on':''}" aria-label="Save to favourites" title="Save to favourites"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v12M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"/></svg></button>
+      <button class="report" aria-label="Not on today or broken link — report and replace" title="Not on today / broken link — report and replace">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><line x1="5.6" y1="5.6" x2="18.4" y2="18.4"/></svg>
+      </button>
+      <button class="dismiss" aria-label="Not interested — replace this" title="Not interested — replace this">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 14V2M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z"/></svg>
+      </button>
+    </div>
+  </div>`;
+}
+
+function renderResults(items, append){
+  const cards=items.map(cardHtml).join('');
+  if(append){
+    const zone=stage.querySelector('.more-zone');
+    zone.insertAdjacentHTML('beforebegin', cards);
+    zone.innerHTML=moreZoneHtml();
+    wireMore();
+  }else{
+    stage.innerHTML=`<div class="results-head">
+        <h2>${escapeHtml(lastCtx.dayLabel||'Today')} near ${escapeHtml(lastCtx.loc)}</h2>
+        <p>${escapeHtml(lastCtx.today)}</p>
+      </div>
+      ${cards}
+      <div class="more-zone">${moreZoneHtml()}</div>`;
+    wireMore();
+    stage.scrollIntoView({behavior:'smooth'});
+  }
+}
+function moreZoneHtml(){
+  return `<button id="more">Show 7 more</button>
+    <div class="dig-note">${depth>=2?'Now digging into the really local stuff — fetes, fairs and one-offs.':'Nothing jumping out? The next batch digs deeper.'}</div>`;
+}
+function wireMore(){ document.getElementById('more').addEventListener('click',()=>findFun(true)); }
+
+/* ---- thumbs-down: dismiss, log, replace ---- */
+stage.addEventListener('click', e=>{
+  const s=e.target.closest('.save');
+  if(s) return toggleFav(s.closest('.card'));
+  const d=e.target.closest('.dismiss');
+  if(d) return dismissCard(d.closest('.card'), null);
+  const r=e.target.closest('.report');
+  if(r){ pendingCard=r.closest('.card'); reportModal.hidden=false; }
+});
+const GHOST_TEXT={
+  inappropriate:'Thanks \u2014 noted. Finding a family-safe replacement\u2026',
+  dead_link:'Thanks \u2014 hunting down the right link\u2026',
+  not_on:'Thanks \u2014 that one\u2019s flagged. Finding a verified replacement\u2026'
+};
+
+/* ---- report modal wiring ---- */
+const reportModal=document.getElementById('reportModal');
+let pendingCard=null;
+reportModal.addEventListener('click', e=>{
+  if(e.target===reportModal || e.target.closest('.mcancel')){ pendingCard=null; reportModal.hidden=true; return; }
+  const opt=e.target.closest('.mopt');
+  if(opt && pendingCard){ const c=pendingCard; pendingCard=null; reportModal.hidden=true; dismissCard(c, opt.dataset.reason); }
+});
+document.addEventListener('keydown', e=>{ if(e.key==='Escape' && !reportModal.hidden){ pendingCard=null; reportModal.hidden=true; } });
+
+/* ---- favourites ---- */
+const RESULTS={};
+let inFavs=false, prevStageHTML=null;
+function favLoad(){
+  try{ return new Map(JSON.parse(localStorage.getItem('wdw_favs')||'[]').map(i=>[i.name,i])); }
+  catch{ return new Map(); }
+}
+function favPersist(){
+  try{ localStorage.setItem('wdw_favs', JSON.stringify([...FAVS.values()])); }catch{}
+}
+const FAVS=favLoad();
+const favBtn=document.getElementById('favBtn');
+function updateFavBtn(){ favBtn.hidden=FAVS.size===0; favBtn.textContent=`\u2665 Favourites (${FAVS.size})`; }
+updateFavBtn();
+favBtn.addEventListener('click', showFavs);
+
+function toggleFav(card){
+  if(!card) return;
+  const name=card.dataset.name||'';
+  if(FAVS.has(name)){ FAVS.delete(name); }
+  else{
+    const it=RESULTS[name];
+    if(!it) return;
+    FAVS.set(name, {...it, savedLoc:(lastCtx&&lastCtx.loc)||'', savedDay:(lastCtx&&lastCtx.dayLabel)||''});
+  }
+  favPersist(); updateFavBtn();
+  if(inFavs){ renderFavs(); }
+  else{ const b=card.querySelector('.save'); if(b) b.classList.toggle('on', FAVS.has(name)); }
+}
+
+function favCardHtml(it){
+  const freeClass=/free/i.test(it.cost||'')?'tag free':'tag';
+  const url=safeUrl(it.url);
+  return `<div class="card ${it.gem?'gem':''}" data-name="${escapeHtml(it.name||'')}">
+    <div class="top"><h3>${escapeHtml(it.name||'')}</h3>${it.gem?'<span class="gem-badge">\u2728 Hidden gem</span>':''}</div>
+    <p>${escapeHtml(it.blurb||'')}</p>
+    <div class="meta">
+      <span class="${freeClass}">${escapeHtml(it.cost||'\u2014')}</span>
+      <span class="tag">${escapeHtml(it.setting||'\u2014')}</span>
+      <span class="tag">${escapeHtml(it.area||'')}</span>
+      ${it.savedLoc?`<span class="tag">Saved near ${escapeHtml(it.savedLoc)}</span>`:''}
+    </div>
+    <div class="bottom">
+      ${url?`<a class="book" href="${url}" target="_blank" rel="noopener">Details &amp; booking \u2192</a>`:''}
+      <button class="save on" aria-label="Remove from favourites" title="Remove from favourites"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v12M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"/></svg></button>
+    </div>
+  </div>`;
+}
+
+function showFavs(){
+  if(!inFavs){ prevStageHTML=stage.innerHTML; inFavs=true; }
+  renderFavs();
+  stage.scrollIntoView({behavior:'smooth'});
+}
+function renderFavs(){
+  const items=[...FAVS.values()];
+  stage.innerHTML=`<div class="results-head">
+      <h2>Your favourites</h2>
+      <p>${items.length?'Tap \u2665 on a card to remove it':'Nothing saved yet \u2014 tap \u2665 on any result to keep it here'}</p>
+    </div>
+    ${items.map(favCardHtml).join('')}
+    <button class="backbtn" id="backBtn">\u2190 Back</button>`;
+  document.getElementById('backBtn').addEventListener('click', exitFavs);
+}
+function exitFavs(){
+  inFavs=false;
+  stage.innerHTML=prevStageHTML||'';
+  prevStageHTML=null;
+  if(document.getElementById('more')) wireMore();
+  stage.querySelectorAll('.card').forEach(c=>{
+    const b=c.querySelector('.save');
+    if(b) b.classList.toggle('on', FAVS.has(c.dataset.name));
+  });
+}
+
+
+
+async function dismissCard(card, reason){
+  if(!card) return;
+  const name=card.dataset.name||'';
+  if(reason==='dead_link'){ const i=shown.indexOf(name); if(i>-1) shown.splice(i,1); }
+  card.classList.add('leaving');
+  setTimeout(()=>card.remove(), 260);
+
+  // ghost placeholder at the bottom of the list, above the more-zone
+  const ghost=document.createElement('div');
+  ghost.className='ghost';
+  ghost.innerHTML='<span class="orb"></span>'+(GHOST_TEXT[reason]||'Finding a fresh one\u2026');
+  const zone=stage.querySelector('.more-zone');
+  if(zone) stage.insertBefore(ghost, zone); else stage.appendChild(ghost);
+
+  const loc=document.getElementById('loc').value.trim();
+  const COST_KEYS=['free','paid','either'];
+  const DIST_KEYS=['5','10','25'];
+  const SET_KEYS=['indoor','outdoor','either'];
+
+  try{
+    const response=await fetch('/api/find',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        loc,
+        cost: COST_KEYS[SPINNERS.cost.idx],
+        dist: DIST_KEYS[SPINNERS.dist.idx],
+        setting: SET_KEYS[SPINNERS.set.idx],
+        depth,
+        excluded: shown,
+        count: 1,
+        dismissed: reason ? null : name,
+        reported: reason ? name : null,
+        reason: reason || null,
+        day
+      })
+    });
+    const data=await response.json();
+    if(!response.ok || data.error) throw new Error(data.error||'no replacement');
+    const item=(data.items||[]).find(it=>!shown.includes(it.name));
+    if(!item) throw new Error('no replacement');
+    shown.push(item.name);
+    // dead-link rescue: if the engine substituted a different option, re-exclude the reported one
+    if(reason==='dead_link' && item.name!==name && !shown.includes(name)) shown.push(name);
+    ghost.outerHTML=cardHtml(item);
+  }catch{
+    ghost.textContent='Couldn\u2019t find a fresh one just now — try "Show 5 more".';
+    setTimeout(()=>{ ghost.style.opacity='0'; setTimeout(()=>ghost.remove(),300); }, 3200);
+  }
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function safeUrl(u){
+  try{ const p=new URL(u); return (p.protocol==='https:'||p.protocol==='http:')?p.href:null; }
+  catch{ return null; }
+}
+</script>
+</body>
+</html>
