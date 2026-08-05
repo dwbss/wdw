@@ -61,3 +61,4 @@ Edit a file on github.com (pencil icon → paste → Commit) and Vercel redeploy
 ## Feedback data
 Vercel → Logs collects every thumbs-down (`thumbs_down`) and every report
 (`reported` with reason: `inappropriate` / `dead_link` / `not_on`) — your free QA stream.
+
