@@ -11,8 +11,58 @@ export const maxDuration = 60;
 // Best-effort in-memory cache (survives while the serverless instance is warm).
 // Proper cross-instance caching = Vercel KV, later.
 const CACHE = new Map();
-function cacheGet(k) { const e = CACHE.get(k); if (e && Date.now() < e.exp) return e.v; CACHE.delete(k); return null; }
-function cacheSet(k, v, ttl) { if (CACHE.size > 200) CACHE.clear(); CACHE.set(k, { v, exp: Date.now() + ttl }); }
+function memGet(k) { const e = CACHE.get(k); if (e && Date.now() < e.exp) return e.v; CACHE.delete(k); return null; }
+function memSet(k, v, ttl) { if (CACHE.size > 200) CACHE.clear(); CACHE.set(k, { v, exp: Date.now() + ttl }); }
+// Shared cache via Redis REST (Vercel Storage / Upstash) when configured;
+// falls back to per-instance memory when not. Zero dependencies.
+const KV_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL || null;
+const KV_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || null;
+async function cacheGet(k) {
+  if (KV_URL && KV_TOKEN) {
+    try {
+      const r = await fetch(KV_URL, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${KV_TOKEN}`, 'content-type': 'application/json' },
+        body: JSON.stringify(['GET', k])
+      });
+      const d = await r.json();
+      if (d && d.result) return JSON.parse(d.result);
+      return null;
+    } catch (e) { console.error('kv get failed:', e.message); }
+  }
+  return memGet(k);
+}
+async function cacheSet(k, v, ttlMs) {
+  if (KV_URL && KV_TOKEN) {
+    try {
+      await fetch(KV_URL, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${KV_TOKEN}`, 'content-type': 'application/json' },
+        body: JSON.stringify(['SET', k, JSON.stringify(v), 'EX', String(Math.round(ttlMs / 1000))])
+      });
+      return;
+    } catch (e) { console.error('kv set failed:', e.message); }
+  }
+  memSet(k, v, ttlMs);
+}
+// Geography + map sweep, cached so nothing is looked up twice
+async function getGeo(loc) {
+  const k = `geo|${loc.toLowerCase()}`;
+  const hit = await cacheGet(k);
+  if (hit) return hit;
+  const geo = await enrichLocation(loc);
+  if (geo) await cacheSet(k, geo, 7 * 24 * 3600 * 1000);
+  return geo;
+}
+async function getSweep(loc, geo, distMiles) {
+  if (!geo || geo.lat == null) return [];
+  const k = `sweep|${(geo.district || loc).toLowerCase()}|${distMiles}`;
+  const hit = await cacheGet(k);
+  if (hit) return hit;
+  const swept = await sweepVenues(geo.lat, geo.lon, distMiles);
+  if (swept.length) await cacheSet(k, swept, 24 * 3600 * 1000);
+  return swept;
+}
 
 // Resolve any UK postcode or place name to its official geography
 // (district council, county, region) via postcodes.io — free, keyless.
@@ -233,7 +283,10 @@ export default async function handler(req, res) {
     : [];
   const safeDepth = Math.min(Math.max(parseInt(depth, 10) || 0, 0), 6);
   const safeLoc = loc.trim();
-  const n = Math.min(Math.max(parseInt(count, 10) || 7, 1), 7);
+  const isFast = mode === 'fast';
+  const n = isFast
+    ? Math.min(Math.max(parseInt(count, 10) || 4, 1), 4)
+    : Math.min(Math.max(parseInt(count, 10) || 7, 1), 7);
 
   // Feedback loop v1: every dismissal lands in the Vercel function logs.
   // (Project → Logs). Upgrade path: write to Vercel KV / a spreadsheet later.
@@ -262,24 +315,21 @@ export default async function handler(req, res) {
 
   // QUICK MODE: instant map-sweep venues while the full search runs
   if (mode === 'quick') {
-    const qKey = `quick|${safeLoc.toLowerCase()}|${dist}`;
-    const cached = cacheGet(qKey);
-    if (cached) return res.status(200).json({ venues: cached });
-    const qGeo = await enrichLocation(safeLoc);
-    const qSwept = (qGeo && qGeo.lat != null)
-      ? await sweepVenues(qGeo.lat, qGeo.lon, parseInt(dist, 10))
-      : [];
-    const venues = qSwept.slice(0, 12);
-    cacheSet(qKey, venues, 12 * 3600 * 1000);
+    const qGeo = await getGeo(safeLoc);
+    const venues = (await getSweep(safeLoc, qGeo, parseInt(dist, 10))).slice(0, 12);
     return res.status(200).json({ venues });
   }
 
-  // best-effort full-result cache (first batch only, per location/criteria/day)
-  const isCacheable = count === 7 && (!excluded || excluded.length === 0) && !dismissed && !reported;
-  const fullKey = `full|${safeLoc.toLowerCase()}|${cost}|${dist}|${setting}|${safeDay}|${targetDate.toDateString()}`;
+  // shared result cache: first family in an area pays, the rest ride free
+  const searchMode = mode === 'fast' ? 'fast' : 'deep';
+  const geoForKey = await getGeo(safeLoc);
+  const normLoc = ((geoForKey && geoForKey.district) || safeLoc).toLowerCase();
+  const exHash = (excluded || []).slice().sort().join('|').slice(0, 200);
+  const isCacheable = !dismissed && !reported && count !== 1;
+  const fullKey = `res|${searchMode}|${normLoc}|${cost}|${dist}|${setting}|${safeDay}|${targetDate.toDateString()}|${exHash}`;
   if (isCacheable) {
-    const hit = cacheGet(fullKey);
-    if (hit) return res.status(200).json({ items: hit, cached: true });
+    const hit = await cacheGet(fullKey);
+    if (hit) { console.log(`cache HIT: ${fullKey.slice(0, 80)}`); return res.status(200).json({ items: hit, cached: true }); }
   }
 
   const REASON_LINES = {
@@ -322,16 +372,14 @@ export default async function handler(req, res) {
     : '';
 
   // Automatic geography enrichment — works for any UK postcode or place name
-  const geo = await enrichLocation(safeLoc);
+  const geo = geoForKey;
   const geoLine = geo && (geo.district || geo.county)
     ? `Official geography: ${safeLoc} falls under ${[geo.district && `${geo.district} council`, geo.county, geo.region].filter(Boolean).join(', ')}. Use these exact names in your discovery searches.`
     : '';
 
   // Radius sweep: every mapped family venue inside the selected distance
   const radiusMiles = parseInt(dist, 10);
-  const swept = (geo && geo.lat != null)
-    ? await sweepVenues(geo.lat, geo.lon, radiusMiles)
-    : [];
+  const swept = await getSweep(safeLoc, geo, radiusMiles);
   console.log(`engine v6 | geo: ${geo ? `${geo.district||'?'} ${geo.lat},${geo.lon}` : 'FAILED'} | sweep: ${swept.length} venues within ${radiusMiles}mi of ${safeLoc}`);
   const sweepLine = swept.length
     ? `MAPPED VENUES inside the ${radiusMiles}-mile radius (from the map database — real places, but verify names/opening before recommending): ${swept.map(v => `${v.name} (${v.type}${v.miles != null ? `, ${v.miles}mi` : ''})`).join('; ')}.`
@@ -354,18 +402,20 @@ STAGE 3 — HUNT the gaps with targeted searches using event vocabulary and this
     ? `Do NOT include any of these (already shown): ${safeExcluded.join('; ')}.`
     : '';
 
+  const fastBrief = `QUICK PASS: return the ${n} best well-established options FAST — trusted venues open ${dayWord} (use the mapped venues list) and major events you can verify in one search. No deep digging; a couple of quick searches at most. Variety of activity types is still essential.`;
+
   const prompt = `You are the results engine for "Why Don't We?", a same-day family day-out finder.
 The search is for ${dayWord}, ${today}. Location: ${safeLoc}, UK. Find things a family with kids aged 3 to 12 can actually do on that day.
 Criteria: ${COSTS[cost]}; ${DISTS[dist]} of ${safeLoc}; ${SETTINGS[setting]} preferred.
 ${geoLine}
 ${sweepLine}
-${blendLine}
-${discoveryLine}
-${packLine}
+${isFast ? fastBrief : blendLine}
+${isFast ? '' : discoveryLine}
+${isFast ? '' : packLine}
 ${seasonLine}
 ${vocabLine}
 ${seedLine}
-${gemHunt}
+${isFast ? '' : gemHunt}
 ${excludedLine}
 URL RULE: every "url" must be the specific detail page for that exact item — the page a parent lands on and immediately sees THIS event or venue's details, times and booking. Copy it VERBATIM from your search or fetch results; never construct or guess a URL from memory. NEVER a homepage, never a generic what's-on or events listing page. If you only saw the item on a listing page, run one more search for its dedicated page; only if none exists may you use the most specific page that names it.
 HARD RULE: no two options may share the same category — one swimming pool, one bowling alley, one farm park etc. per list, never two.
@@ -377,7 +427,7 @@ Keep it compact. Only include options genuinely available ${dayWord}.`;
     const searchTool = {
       type: 'web_search_20250305',
       name: 'web_search',
-      max_uses: n === 1 ? 3 : 5,
+      max_uses: isFast ? 3 : (n === 1 ? 3 : 5),
       user_location: { type: 'approximate', country: 'GB', timezone: 'Europe/London' }
     };
     const fetchTool = {
@@ -387,7 +437,7 @@ Keep it compact. Only include options genuinely available ${dayWord}.`;
       max_content_tokens: 6000
     };
 
-    let data = await callClaude(prompt, [searchTool, fetchTool], true);
+    let data = await callClaude(prompt, isFast ? [searchTool] : [searchTool, fetchTool], !isFast);
     if (data.error) {
       // If the fetch tool is ever rejected (beta changes etc.), degrade
       // gracefully to search-only rather than failing the user.
@@ -432,7 +482,7 @@ Keep it compact. Only include options genuinely available ${dayWord}.`;
       gem: Boolean(it.gem)
     }));
 
-    if (isCacheable && clean.length) cacheSet(fullKey, clean, 2 * 3600 * 1000);
+    if (isCacheable && clean.length) await cacheSet(fullKey, clean, 2 * 3600 * 1000);
     return res.status(200).json({ items: clean });
   } catch (err) {
     return res.status(500).json({ error: 'Something went wrong — try again' });
