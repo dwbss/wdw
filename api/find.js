@@ -52,6 +52,7 @@ async function enrichLocation(loc) {
 }
 
 // Call the Claude API, continuing automatically if a long tool-use turn pauses.
+// Accumulates text across ALL turns so nothing gathered is ever lost.
 async function callClaude(prompt, tools, withFetchBeta) {
   const headers = {
     'content-type': 'application/json',
@@ -61,23 +62,25 @@ async function callClaude(prompt, tools, withFetchBeta) {
   if (withFetchBeta) headers['anthropic-beta'] = 'web-fetch-2025-09-10';
 
   let messages = [{ role: 'user', content: prompt }];
-  let data = null;
-  for (let i = 0; i < 4; i++) {
+  let collected = '';
+  let last = null;
+  for (let i = 0; i < 5; i++) {
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers,
       body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 5000, messages, tools })
     });
-    data = await r.json();
-    if (data.error) return data;
-    if (data.stop_reason === 'pause_turn') {
-      // long search run paused mid-turn — hand its progress back and continue
-      messages = [...messages, { role: 'assistant', content: data.content }];
+    last = await r.json();
+    if (last.error) return { error: last.error };
+    collected += (last.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
+    console.log(`claude turn ${i}: stop=${last.stop_reason}, text so far=${collected.length} chars`);
+    if (last.stop_reason === 'pause_turn') {
+      messages = [...messages, { role: 'assistant', content: last.content }];
       continue;
     }
     break;
   }
-  return data;
+  return { text: collected, stop_reason: last ? last.stop_reason : 'unknown' };
 }
 
 // Sweep the selected radius for family venues via OpenStreetMap's Overpass API
@@ -388,10 +391,7 @@ Keep it compact. Only include options genuinely available ${dayWord}.`;
       console.error('response truncated at max_tokens');
     }
 
-    const text = (data.content || [])
-      .filter(b => b.type === 'text')
-      .map(b => b.text)
-      .join('\n');
+    const text = data.text || '';
 
     let items = parseItems(text);
     if (!items || items.length === 0) {
