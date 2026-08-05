@@ -286,7 +286,7 @@ export default async function handler(req, res) {
   const isFast = mode === 'fast';
   const n = isFast
     ? Math.min(Math.max(parseInt(count, 10) || 4, 1), 4)
-    : Math.min(Math.max(parseInt(count, 10) || 7, 1), 7);
+    : Math.min(Math.max(parseInt(count, 10) || 5, 1), 5);
 
   // Feedback loop v1: every dismissal lands in the Vercel function logs.
   // (Project → Logs). Upgrade path: write to Vercel KV / a spreadsheet later.
@@ -340,8 +340,8 @@ export default async function handler(req, res) {
   const gemHunt = n === 1
     ? `${(safeReason && reported && REASON_LINES[safeReason]) || 'The user rejected an option and wants ONE strong replacement. Prefer a different type of activity from those already shown.'} A small local one-off found on a council, parish, village hall or community page is ideal ("gem": true) but a great venue is fine too.`
     : safeDepth === 0
-    ? `Run several web searches, not one. Use the vocabulary these events actually use: search "[locality] fete", "fair", "fun day", "open farm", "craft fair", "carnival", "family event" with the target date, plus general venue searches. At least 2 of the 7 results must be hidden gems: a small, one-off, low-publicity local event found on a council, parish, village hall, local newspaper or community page — not a big aggregator. Mark it "gem": true.`
-    : `The user has seen the obvious options. Dig DEEPER now. Search local council event calendars, parish and village hall pages, local newspaper what's-on listings, community and church pages, indexed Facebook event pages. Use search terms like fete, gala, fun day, steam rally, agricultural show, open farm, craft fair, carnival, library event + the locality and the target date. Prefer small, one-off, low-publicity events over chains and big venues. At least 4 of the 7 must be hidden gems ("gem": true).`;
+    ? `Run several web searches, not one. Use the vocabulary these events actually use: search "[locality] fete", "fair", "fun day", "open farm", "craft fair", "carnival", "family event" with the target date, plus general venue searches. At least 1 of the 5 results must be a hidden gem: a small, one-off, low-publicity local event found on a council, parish, village hall, local newspaper or community page — not a big aggregator. Mark it "gem": true.`
+    : `The user has seen the obvious options. Dig DEEPER now. Search local council event calendars, parish and village hall pages, local newspaper what's-on listings, community and church pages, indexed Facebook event pages. Use search terms like fete, gala, fun day, steam rally, agricultural show, open farm, craft fair, carnival, library event + the locality and the target date. Prefer small, one-off, low-publicity events over chains and big venues. At least 3 of the 5 must be hidden gems ("gem": true).`;
 
   // Setting-specific venue-category searches
   let vocabLine = '';
@@ -384,7 +384,7 @@ export default async function handler(req, res) {
   const sweepLine = swept.length
     ? `MAPPED VENUES inside the ${radiusMiles}-mile radius (from the map database — real places, but verify names/opening before recommending): ${swept.map(v => `${v.name} (${v.type}${v.miles != null ? `, ${v.miles}mi` : ''})`).join('; ')}.`
     : '';
-  const blendLine = `Aim for a MIX in the final 7: roughly half brilliant VENUES open ${dayWord} (farm parks, water slides, karting, soft play, swimming, trampoline parks — use the mapped venues list plus your searches) and half EVENTS on ${dayWord}. Variety of activity types across the 7 is essential.`;
+  const blendLine = `Aim for a MIX in the final 5: roughly half brilliant VENUES open ${dayWord} (farm parks, water slides, karting, soft play, swimming, trampoline parks — use the mapped venues list plus your searches) and half EVENTS on ${dayWord}. Variety of activity types across the 5 is essential.`;
 
   // Self-assembling source map: discover, then read, then hunt.
   // This is the UK-wide playbook — the same source TYPES exist everywhere,
