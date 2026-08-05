@@ -357,9 +357,10 @@ ${vocabLine}
 ${seedLine}
 ${gemHunt}
 ${excludedLine}
+URL RULE: every "url" must be the specific detail page for that exact item — the page a parent lands on and immediately sees THIS event or venue's details, times and booking. Copy it VERBATIM from your search or fetch results; never construct or guess a URL from memory. NEVER a homepage, never a generic what's-on or events listing page. If you only saw the item on a listing page, run one more search for its dedicated page; only if none exists may you use the most specific page that names it.
 HARD RULE: no two options may share the same category — one swimming pool, one bowling alley, one farm park etc. per list, never two.
 Respond with ONLY a raw JSON array (no markdown, no commentary) of the ${n === 1 ? 1 : n + 2} best options, ranked best first, each a DIFFERENT category. Each object has exactly these keys:
-"name" (string), "category" (2-3 word activity type, e.g. "swimming pool", "bowling", "farm park", "fete", "museum"), "blurb" (string, max 18 words, why it's great today), "cost" ("Free" or short price like "£8 adult"), "setting" ("Indoor"|"Outdoor"|"Both"), "area" (short place name), "url" (real info/booking URL from your search), "time" (short like "10:00–16:00"), "gem" (true if a small one-off low-publicity local find, else false).
+"name" (string), "category" (2-3 word activity type, e.g. "swimming pool", "bowling", "farm park", "fete", "museum"), "blurb" (string, max 18 words, why it's great today), "cost" ("Free" or short price like "£8 adult"), "setting" ("Indoor"|"Outdoor"|"Both"), "area" (short place name), "url" (see URL RULE above), "time" (short like "10:00–16:00"), "gem" (true if a small one-off low-publicity local find, else false).
 Keep it compact. Only include options genuinely available ${dayWord}.`;
 
   try {
