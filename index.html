@@ -507,7 +507,7 @@ async function findFun(append){
   const ticker=setInterval(()=>{ li=(li+1)%lines.length; const p=document.getElementById('loadline'); if(p)p.textContent=lines[li]; },2600);
 
   const target=new Date(Date.now()+(day==='tomorrow'?86400000:0));
-  const today=target.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  const today=target.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric',timeZone:'Europe/London'});
   lastCtx={loc,today,dayLabel: day==='today'?'Today':'Tomorrow'};
 
   // instant layer: nearby mapped venues appear while the deep search runs
