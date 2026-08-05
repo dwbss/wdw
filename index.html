@@ -474,100 +474,7 @@ const LOADING=[
   ['Going deeper\u2026','Searching village halls and local news\u2026','Finding the ones nobody advertises\u2026']
 ];
 
-goBtn.addEventListener('click', ()=>{ shown=[]; depth=0; findFresh(); });
-
-// Fresh search: fast picks render in ~10-15s, gems stream in behind
-async function findFresh(){
-  inFavs=false; prevStageHTML=null;
-  let loc=document.getElementById('loc').value.trim();
-  if(!loc){
-    locTxt.textContent='Locating\u2026';
-    try{
-      loc=await getLocation();
-      document.getElementById('loc').value=loc;
-      locTxt.textContent='Find my location';
-    }catch{
-      locTxt.textContent='Find my location';
-      document.getElementById('loc').focus();
-      document.getElementById('loc').placeholder='Add your town or postcode first';
-      return;
-    }
-  }
-  goBtn.disabled=true;
-  loadQuickVenues(loc);
-
-  const lines=LOADING[0];
-  let li=0;
-  const loadEl=document.createElement('div');
-  loadEl.className='loading';
-  loadEl.innerHTML=`<div class="bounce"><span></span><span></span><span></span></div><div id="loadline">${lines[0]}</div>`;
-  stage.replaceChildren(loadEl);
-  const ticker=setInterval(()=>{ li=(li+1)%lines.length; const el=document.getElementById('loadline'); if(el)el.textContent=lines[li]; },2600);
-
-  const target=new Date(Date.now()+(day==='tomorrow'?86400000:0));
-  const today=target.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
-  lastCtx={loc,today,dayLabel: day==='today'?'Today':'Tomorrow'};
-
-  const base={
-    loc,
-    cost: ['free','paid','either'][SPINNERS.cost.idx],
-    dist: ['5','10','25'][SPINNERS.dist.idx],
-    setting: ['indoor','outdoor','either'][SPINNERS.set.idx],
-    day
-  };
-
-  try{
-    // PHASE 1 — fast picks
-    const r1=await fetch('/api/find',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({...base, mode:'fast', depth:0})});
-    const d1=await r1.json();
-    if(!r1.ok||d1.error) throw new Error(d1.error||'Search failed — try again');
-    let fastItems=(d1.items||[]).filter(it=>!shown.includes(it.name));
-    if(fastItems.length===0) throw new Error('No results came back — try again');
-    fastItems.forEach(it=>shown.push(it.name));
-    clearInterval(ticker);
-    depth=1;
-
-    stage.innerHTML=`<div class="results-head">
-        <h2>${escapeHtml(lastCtx.dayLabel||'Today')} near ${escapeHtml(lastCtx.loc)}</h2>
-        <p>${escapeHtml(lastCtx.today)}</p>
-      </div>
-      ${fastItems.map(cardHtml).join('')}
-      <div class="more-zone"><div class="deepnote"><span class="orb"></span>Digging deeper for hidden gems\u2026</div></div>`;
-    stage.scrollIntoView({behavior:'smooth'});
-
-    // PHASE 2 — the deep dig, appended as it lands
-    try{
-      const r2=await fetch('/api/find',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({...base, mode:'deep', depth:0, excluded: shown, count: Math.max(7-shown.length,3)})});
-      const d2=await r2.json();
-      if(!r2.ok||d2.error) throw new Error(d2.error||'deep failed');
-      const deepItems=(d2.items||[]).filter(it=>!shown.includes(it.name));
-      deepItems.forEach(it=>shown.push(it.name));
-      const zone=stage.querySelector('.more-zone');
-      if(zone){
-        zone.insertAdjacentHTML('beforebegin', deepItems.map(cardHtml).join(''));
-        zone.innerHTML=moreZoneHtml();
-        wireMore();
-      }
-    }catch(e){
-      console.error('WDW deep phase:', e);
-      const zone=stage.querySelector('.more-zone');
-      if(zone){ zone.innerHTML=moreZoneHtml(); wireMore(); }
-    }
-  }catch(err){
-    clearInterval(ticker);
-    console.error('WDW error:', err);
-    stage.innerHTML='';
-    const errEl=document.createElement('div');
-    errEl.className='error';
-    errEl.innerHTML=`Something went wrong: ${escapeHtml(err&&err.message?err.message:String(err))}<button id="retry">Try again</button>`;
-    stage.replaceChildren(errEl);
-    document.getElementById('retry').addEventListener('click',()=>{ shown=[]; depth=0; findFresh(); });
-  }finally{
-    goBtn.disabled=false;
-  }
-}
+goBtn.addEventListener('click', ()=>{ shown=[]; depth=0; findFun(false); });
 
 async function findFun(append){
   if(!append){ inFavs=false; prevStageHTML=null; }
@@ -631,7 +538,7 @@ async function findFun(append){
     catch(e){ console.error('WDW parse phase:', e); throw new Error('The server had a hiccup — try again'); }
     if(!response.ok || data.error) throw new Error(data.error||'Search failed — try again');
 
-    let items=(data.items||[]).filter(it=>!shown.includes(it.name)).slice(0,7);
+    let items=(data.items||[]).filter(it=>!shown.includes(it.name)).slice(0,5);
     if(items.length===0) throw new Error('No results came back — try again');
     items.forEach(it=>shown.push(it.name));
     depth++;
@@ -723,7 +630,7 @@ function renderResults(items, append){
   }
 }
 function moreZoneHtml(){
-  return `<button id="more">Show 7 more</button>
+  return `<button id="more">Show 5 more</button>
     <div class="dig-note">${depth>=2?'Now digging into the really local stuff — fetes, fairs and one-offs.':'Nothing jumping out? The next batch digs deeper.'}</div>`;
 }
 function wireMore(){ document.getElementById('more').addEventListener('click',()=>findFun(true)); }
