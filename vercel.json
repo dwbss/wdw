@@ -1,0 +1,6 @@
+{
+  "crons": [
+    { "path": "/api/warm?day=today", "schedule": "30 5 * * *" },
+    { "path": "/api/warm?day=tomorrow", "schedule": "30 17 * * *" }
+  ]
+}
