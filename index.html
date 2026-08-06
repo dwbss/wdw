@@ -253,18 +253,35 @@
   #more:hover{border-color:#c8c6be}
   #more:disabled{opacity:.55;cursor:wait}
   .dig-note{text-align:center;font-size:12.5px;color:var(--ink-soft);font-weight:600;margin-top:10px}
-  .also-toggle{
-    display:block;margin:22px auto 0;font:inherit;font-weight:700;font-size:13px;
-    color:var(--ink-soft);background:none;border:none;cursor:pointer;padding:6px 10px;
+  .also{
+    background:var(--accent-soft);border-radius:16px;
+    padding:16px 16px 8px;margin-top:24px;
   }
-  .also-toggle:hover{color:var(--ink)}
-  .also-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-  .also-body{margin-top:12px}
-  .also-body .cap{text-align:center;font-size:11.5px;color:var(--ink-soft);opacity:.8;font-weight:600;margin-bottom:10px}
-  .also-body .chips{display:flex;gap:7px;flex-wrap:wrap;justify-content:center}
-  .qv{font:inherit;font-weight:700;font-size:12.5px;color:var(--ink);background:var(--surface);border:1.5px solid var(--line);border-radius:999px;padding:7px 12px;text-decoration:none;transition:border-color .15s}
-  .qv:hover{border-color:var(--accent)}
-  .qv .t{color:var(--ink-soft);font-weight:600}
+  .also h4{
+    font-family:'Sora',sans-serif;font-size:14.5px;font-weight:700;
+    letter-spacing:-.01em;color:var(--ink);
+  }
+  .also .cap{font-size:11.5px;color:var(--ink-soft);font-weight:600;margin:3px 0 6px}
+  .vrow{
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
+    padding:11px 2px;border-top:1px solid rgba(37,87,224,.14);
+    text-decoration:none;
+  }
+  .vrow:first-of-type{border-top:none}
+  .vrow .vname{
+    font-weight:800;font-size:14px;color:var(--ink);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .vrow .vmeta{
+    flex:0 0 auto;font-weight:700;font-size:12px;color:var(--accent-deep);
+    white-space:nowrap;opacity:.85;
+  }
+  .vmore{
+    display:block;width:100%;text-align:center;padding:11px 2px 9px;
+    font:inherit;font-weight:800;font-size:12.5px;color:var(--accent);
+    background:none;border:none;border-top:1px solid rgba(37,87,224,.14);cursor:pointer;
+  }
+  .vmore:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   .deepnote{
     display:flex;align-items:center;justify-content:center;gap:9px;
     padding:16px;border:1.5px dashed var(--line);border-radius:var(--radius);
@@ -628,21 +645,31 @@ function renderAlso(){
   const zone=document.getElementById('alsoZone');
   if(!zone||!nearbyVenues.length) return;
   const normed=new Set(shown.map(s=>String(s).toLowerCase()));
-  const vs=nearbyVenues.filter(v=>!normed.has(String(v.name).toLowerCase())).slice(0,12);
+  const vs=nearbyVenues
+    .filter(v=>!normed.has(String(v.name).toLowerCase()))
+    .sort((a,b)=> (a.type||'').localeCompare(b.type||'') || ((a.miles??99)-(b.miles??99)) )
+    .slice(0,12);
   if(!vs.length){ zone.innerHTML=''; return; }
-  zone.innerHTML=`<button class="also-toggle" id="alsoToggle">Also on the map nearby \u00b7 ${vs.length} venues \u25b8</button>
-    <div class="also-body" id="alsoBody" hidden>
-      <div class="cap">Straight from the map \u2014 check opening times before setting out</div>
-      <div class="chips">${vs.map(v=>{
-        const q=encodeURIComponent(v.name+' near '+((lastCtx&&lastCtx.loc)||''));
-        return `<a class="qv" href="https://www.google.com/maps/search/?api=1&query=${q}" target="_blank" rel="noopener">${escapeHtml(v.name)} <span class="t">\u00b7 ${escapeHtml(v.type)}${v.miles!=null?` \u00b7 ${v.miles}mi`:''}</span></a>`;
-      }).join('')}</div>
+  const row=v=>{
+    const q=encodeURIComponent(v.name+' near '+((lastCtx&&lastCtx.loc)||''));
+    return `<a class="vrow" href="https://www.google.com/maps/search/?api=1&query=${q}" target="_blank" rel="noopener">
+      <span class="vname">${escapeHtml(v.name)}</span>
+      <span class="vmeta">${escapeHtml(v.type)}${v.miles!=null?` \u00b7 ${v.miles}mi`:''}</span>
+    </a>`;
+  };
+  const first=vs.slice(0,6), rest=vs.slice(6);
+  zone.innerHTML=`<div class="also">
+      <h4>You may also like</h4>
+      <div class="cap">Nearby on the map \u2014 check opening times before setting out</div>
+      ${first.map(row).join('')}
+      <div id="alsoRest" hidden>${rest.map(row).join('')}</div>
+      ${rest.length?`<button class="vmore" id="alsoMore">+ ${rest.length} more \u25be</button>`:''}
     </div>`;
-  document.getElementById('alsoToggle').addEventListener('click',()=>{
-    const b=document.getElementById('alsoBody');
-    const t=document.getElementById('alsoToggle');
-    b.hidden=!b.hidden;
-    t.textContent=`Also on the map nearby \u00b7 ${vs.length} venues ${b.hidden?'\u25b8':'\u25be'}`;
+  const btn=document.getElementById('alsoMore');
+  if(btn) btn.addEventListener('click',()=>{
+    const r=document.getElementById('alsoRest');
+    r.hidden=!r.hidden;
+    btn.textContent=r.hidden?`+ ${rest.length} more \u25be`:`show fewer \u25b4`;
   });
 }
 
