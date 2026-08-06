@@ -251,19 +251,46 @@ nwr(around:${m},${lat},${lon})["sport"~"${VENUE_TAGS.sport}"]["name"];
   finally { clearTimeout(t); }
 }
 
-// Extract the results array from engine output, salvaging complete entries
-// from a truncated response rather than failing outright.
-function parseItems(raw) {
-  const text = (raw || '').replace(/```json|```/gi, '');
-  const start = text.indexOf('[');
-  if (start === -1) return null;
-  const end = text.lastIndexOf(']');
-  if (end > start) {
-    try { const a = JSON.parse(text.slice(start, end + 1)); if (Array.isArray(a)) return a; } catch {}
+// Extract the results array from engine output. Robust against preamble
+// text, stray brackets, markdown fences, and truncation: finds genuine
+// array-of-objects openings, tries the LAST first (final answers live at
+// the end), and walks brackets string-aware.
+function scanArray(text, start) {
+  let depth = 0, inStr = false, esc = false;
+  for (let i = start; i < text.length; i++) {
+    const c = text[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === '\\') esc = true;
+      else if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') { inStr = true; continue; }
+    if (c === '[' || c === '{') depth++;
+    else if (c === ']' || c === '}') {
+      depth--;
+      if (depth === 0) {
+        try { const a = JSON.parse(text.slice(start, i + 1)); if (Array.isArray(a)) return a; } catch {}
+        return null;
+      }
+    }
   }
+  // ran off the end: truncated — close after the last complete object
   const lastBrace = text.lastIndexOf('}');
   if (lastBrace > start) {
     try { const a = JSON.parse(text.slice(start, lastBrace + 1) + ']'); if (Array.isArray(a)) return a; } catch {}
+  }
+  return null;
+}
+function parseItems(raw) {
+  const text = (raw || '').replace(/```json|```/gi, '');
+  const starts = [];
+  const re = /\[\s*\{/g;
+  let m;
+  while ((m = re.exec(text))) starts.push(m.index);
+  for (let s = starts.length - 1; s >= 0; s--) {
+    const a = scanArray(text, starts[s]);
+    if (a && a.length) return a;
   }
   return null;
 }
