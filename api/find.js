@@ -514,6 +514,7 @@ Keep it compact. Only include options genuinely available ${dayWord}.`;
       max_content_tokens: 6000
     };
 
+    const t0 = Date.now();
     let data = await callClaude(prompt, isFast ? [searchTool] : [searchTool, fetchTool], !isFast);
     if (data.error) {
       // If the fetch tool is ever rejected (beta changes etc.), degrade
@@ -535,6 +536,36 @@ Keep it compact. Only include options genuinely available ${dayWord}.`;
     if (!items || items.length === 0) {
       console.error('parse: no usable JSON. stop_reason=', data.stop_reason, '| tail:', text.slice(-300));
       return res.status(502).json({ error: 'No results came back — try again' });
+    }
+
+    // TOP-UP: a rescued run can come back short. If there's time left in the
+    // function budget, run one focused follow-up to complete the batch —
+    // the user still gets a single, full delivery.
+    if (items.length < n && n > 1 && (Date.now() - t0) < 38000) {
+      const missing = n - items.length;
+      const exclNames = [...safeExcluded, ...items.map(i => String(i.name || ''))].filter(Boolean);
+      const topPrompt = `You are the results engine for "Why Don't We?", a same-day family day-out finder.
+The search is for ${dayWord}, ${today}. Location: ${safeLoc}, UK. Kids aged 3 to 12.
+Criteria: ${COSTS[cost]}; ${DISTS[dist]} of ${safeLoc}; ${SETTINGS[setting]} preferred.
+${seasonLine}
+Find ${missing + 1} MORE options, quickly — a couple of searches at most. Each must be a DIFFERENT category of activity from the others and from these already-found items: ${exclNames.join('; ')}. Do NOT repeat any of them.
+URL RULE: every "url" must be the specific detail page for that exact item, copied verbatim from your results — never a homepage or listings index.
+Respond with ONLY a raw JSON array of ${missing + 1} objects with keys: "name","category","blurb" (max 18 words),"cost","setting" ("Indoor"|"Outdoor"|"Both"),"area","url","time","gem" (boolean). Only options genuinely available ${dayWord}.`;
+      try {
+        const topData = await callClaude(topPrompt, [{ ...searchTool, max_uses: 3 }], false);
+        if (!topData.error) {
+          const extra = parseItems(topData.text || '') || [];
+          const have = new Set(items.map(i => String(i.name || '').toLowerCase().trim()));
+          for (const it of extra) {
+            const k = String(it.name || '').toLowerCase().trim();
+            if (k && !have.has(k)) { items.push(it); have.add(k); }
+            if (items.length >= n) break;
+          }
+          console.log(`top-up: batch was short, now ${items.length}/${n} after follow-up`);
+        }
+      } catch (e) { console.error('top-up failed:', e.message); }
+    } else if (items.length < n && n > 1) {
+      console.log(`batch short (${items.length}/${n}) but no time budget for top-up (${Date.now() - t0}ms elapsed)`);
     }
 
     // enforce one-per-category within the batch (belt to the prompt's braces)
