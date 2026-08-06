@@ -380,7 +380,20 @@ export default async function handler(req, res) {
   // QUICK MODE: instant map-sweep venues while the full search runs
   if (mode === 'quick') {
     const qGeo = await getGeo(safeLoc);
-    const venues = (await getSweep(safeLoc, qGeo, parseInt(dist, 10))).slice(0, 12);
+    const wantMiles = parseInt(dist, 10);
+    let venues = (await getSweep(safeLoc, qGeo, wantMiles)).slice(0, 12);
+    if (!venues.length && qGeo) {
+      // map service grumpy at this radius — borrow any cached sweep for the
+      // district at another radius, trimmed to the requested distance
+      for (const r of [25, 10, 5]) {
+        if (r === wantMiles) continue;
+        const alt = await cacheGet(`sweep|${(qGeo.district || safeLoc).toLowerCase()}|${r}`);
+        if (alt && alt.length) {
+          venues = alt.filter(v => v.miles == null || v.miles <= wantMiles).slice(0, 12);
+          if (venues.length) { console.log(`quick: borrowed ${r}mi sweep for ${wantMiles}mi request`); break; }
+        }
+      }
+    }
     return res.status(200).json({ venues });
   }
 
@@ -390,7 +403,7 @@ export default async function handler(req, res) {
   const normLoc = ((geoForKey && geoForKey.district) || safeLoc).toLowerCase();
   const exHash = (excluded || []).slice().sort().join('|').slice(0, 200);
   const isCacheable = !dismissed && !reported && count !== 1;
-  const fullKey = `res|${searchMode}|${normLoc}|${cost}|${dist}|${setting}|${safeDay}|${targetDate.toDateString()}|${exHash}`;
+  const fullKey = `res2|${searchMode}|${normLoc}|${cost}|${dist}|${setting}|${safeDay}|${targetDate.toDateString()}|${exHash}`;
   if (isCacheable) {
     const hit = await cacheGet(fullKey);
     if (hit) { console.log(`cache HIT: ${fullKey.slice(0, 80)}`); return res.status(200).json({ items: hit, cached: true }); }
@@ -546,7 +559,8 @@ Keep it compact. Only include options genuinely available ${dayWord}.`;
       gem: Boolean(it.gem)
     }));
 
-    if (isCacheable && clean.length) await cacheSet(fullKey, clean, 2 * 3600 * 1000);
+    if (isCacheable && clean.length >= n) await cacheSet(fullKey, clean, 2 * 3600 * 1000);
+    else if (isCacheable) console.log(`partial batch (${clean.length}/${n}) — served but NOT cached`);
     return res.status(200).json({ items: clean });
   } catch (err) {
     return res.status(500).json({ error: 'Something went wrong — try again' });
