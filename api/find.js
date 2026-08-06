@@ -115,6 +115,7 @@ async function callClaude(prompt, tools, withFetchBeta) {
   let messages = [{ role: 'user', content: [{ type: 'text', text: prompt, cache_control: { type: 'ephemeral' } }] }];
   let collected = '';
   let last = null;
+  let lastAppended = false;
   let cost = { in: 0, out: 0, cacheRead: 0, cacheWrite: 0 };
   for (let i = 0; i < 3; i++) {
     const r = await fetch('https://api.anthropic.com/v1/messages', {
@@ -131,11 +132,39 @@ async function callClaude(prompt, tools, withFetchBeta) {
     cost.cacheRead += u.cache_read_input_tokens || 0;
     cost.cacheWrite += u.cache_creation_input_tokens || 0;
     console.log(`claude turn ${i}: stop=${last.stop_reason}, text=${collected.length} chars, in=${u.input_tokens||0}, out=${u.output_tokens||0}, cacheRead=${u.cache_read_input_tokens||0}, cacheWrite=${u.cache_creation_input_tokens||0}`);
+    lastAppended = false;
     if (last.stop_reason === 'pause_turn') {
       messages = [...messages, { role: 'assistant', content: last.content }];
+      lastAppended = true;
       continue;
     }
     break;
+  }
+
+  // "Pens down": if the dig ran out of turns (or never emitted the list),
+  // force a final answer from what's already been gathered — no more tools.
+  if (last && !last.error && (last.stop_reason === 'pause_turn' || !collected.includes('['))) {
+    try {
+      const wrapMsgs = lastAppended
+        ? [...messages, { role: 'user', content: 'STOP searching. Using ONLY what you have already gathered, output the final raw JSON array now — nothing else.' }]
+        : [...messages, { role: 'assistant', content: last.content }, { role: 'user', content: 'STOP searching. Using ONLY what you have already gathered, output the final raw JSON array now — nothing else.' }];
+      const wr = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 2500, messages: wrapMsgs, tools, tool_choice: { type: 'none' } })
+      });
+      const wd = await wr.json();
+      if (!wd.error) {
+        collected += '\n' + (wd.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
+        const wu = wd.usage || {};
+        cost.in += wu.input_tokens || 0; cost.out += wu.output_tokens || 0;
+        cost.cacheRead += wu.cache_read_input_tokens || 0; cost.cacheWrite += wu.cache_creation_input_tokens || 0;
+        console.log(`pens-down turn: stop=${wd.stop_reason}, text=${collected.length} chars`);
+        last = wd;
+      } else {
+        console.error('pens-down error:', JSON.stringify(wd.error));
+      }
+    } catch (e) { console.error('pens-down failed:', e.message); }
   }
   // rough cost estimate at Sonnet rates ($3/M in, $15/M out, $0.30/M cache read, $3.75/M cache write)
   const usd = (cost.in * 3 + cost.out * 15 + cost.cacheRead * 0.3 + cost.cacheWrite * 3.75) / 1e6;
@@ -174,13 +203,21 @@ nwr(around:${m},${lat},${lon})["leisure"~"${VENUE_TAGS.leisure}"]["name"];
 nwr(around:${m},${lat},${lon})["tourism"~"${VENUE_TAGS.tourism}"]["name"];
 nwr(around:${m},${lat},${lon})["sport"~"${VENUE_TAGS.sport}"]["name"];
 );out center tags 120;`;
-    // try the main Overpass server, then a mirror if it's busy
+    // try the Overpass servers in turn; identify ourselves properly (their
+    // abuse filters dislike anonymous requests from shared cloud IPs)
     let d = null;
-    for (const endpoint of ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter']) {
+    for (const endpoint of [
+      'https://overpass-api.de/api/interpreter',
+      'https://overpass.kumi.systems/api/interpreter',
+      'https://overpass.osm.jp/api/interpreter'
+    ]) {
       try {
         const r = await fetch(endpoint, {
           method: 'POST',
-          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          headers: {
+            'content-type': 'application/x-www-form-urlencoded',
+            'user-agent': 'WhyDontWe/1.0 (family day-out finder; https://www.whydontwe.uk)'
+          },
           body: 'data=' + encodeURIComponent(q),
           signal: controller.signal
         });
