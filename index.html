@@ -197,13 +197,34 @@
   .save.on{color:#fff;background:var(--accent);border-color:var(--accent)}
   .save:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   .save svg{width:15px;height:15px;pointer-events:none}
+  .toprow{display:flex;gap:8px;justify-content:flex-end;align-items:center;margin:8px 0 -16px}
   .favbtn{
     display:flex;align-items:center;gap:5px;width:fit-content;
-    margin:8px 0 -16px auto; /* right-aligned, tight to the panel */
     font:inherit;font-weight:800;font-size:12px;color:var(--accent);
     background:var(--surface);border:1.5px solid var(--line);border-radius:999px;
     padding:4px 10px;cursor:pointer;transition:border-color .15s;
   }
+  .authbtn{
+    display:flex;align-items:center;gap:5px;width:fit-content;
+    font:inherit;font-weight:800;font-size:12px;color:var(--ink-soft);
+    background:var(--surface);border:1.5px solid var(--line);border-radius:999px;
+    padding:4px 10px;cursor:pointer;transition:border-color .15s;
+  }
+  .authbtn:hover{border-color:var(--accent);color:var(--accent)}
+  .authbtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .modal input{
+    width:100%;font:inherit;font-weight:700;font-size:16px;
+    padding:11px 13px;border-radius:12px;border:1.5px solid var(--line);
+    background:var(--bg);color:var(--ink);outline:none;margin-bottom:10px;
+  }
+  .modal input:focus{border-color:var(--accent)}
+  .modal .mgo{
+    display:block;width:100%;font:inherit;font-weight:800;font-size:14px;
+    color:#fff;background:var(--accent);border:none;border-radius:12px;
+    padding:12px;cursor:pointer;
+  }
+  .modal .mgo:disabled{opacity:.6;cursor:wait}
+  .modal .mnote{font-size:12.5px;color:var(--ink-soft);font-weight:600;margin:8px 0 0;text-align:center;min-height:16px}
   .favbtn:hover{border-color:var(--accent)}
   .favbtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   .backbtn{
@@ -254,11 +275,14 @@
   #more:disabled{opacity:.55;cursor:wait}
   .dig-note{text-align:center;font-size:12.5px;color:var(--ink-soft);font-weight:600;margin-top:10px}
   .also{
-    background:#f7fafe;border:2px solid var(--gem);border-radius:16px;
+    background:#f7fafe;border:2px solid var(--accent);border-radius:16px;
     padding:16px 16px 8px;margin-top:24px;
   }
-  .also h4{
-    text-align:center;font:inherit;font-size:15px;font-weight:800;color:var(--ink);
+  .also-pill{
+    display:block;width:fit-content;margin:0 auto;
+    font-size:11px;font-weight:800;letter-spacing:.04em;
+    color:var(--accent);background:var(--accent-soft);border:1px solid var(--accent);
+    padding:3px 9px;border-radius:999px;white-space:nowrap;
   }
   .also .cap{text-align:center;font-size:11.5px;color:var(--ink-soft);font-weight:600;margin:4px 0 6px}
   .vrow{
@@ -319,7 +343,10 @@
   <header>
     <h1>Why don't we<span class="q">?</span></h1>
     <p>Designed for parents who are looking for fun things to do with the kids today.</p>
-    <button class="favbtn" id="favBtn" hidden>♥ Favourites (0)</button>
+    <div class="toprow">
+      <button class="authbtn" id="authBtn">Sign in</button>
+      <button class="favbtn" id="favBtn" hidden>♥ Favourites (0)</button>
+    </div>
   </header>
 
   <div class="panel">
@@ -360,7 +387,23 @@
 
   <div class="stage" id="stage" aria-live="polite"></div>
 
-  <footer>Results are found live on the web for today's date. Always check times and availability on the venue's page before heading out.</footer>
+  <footer>Results are found live on the web for today's date. Always check times and availability on the venue's page before heading out. <span style="opacity:.45">· wdw-20260807-b</span></footer>
+<div class="modal-backdrop" id="authModal" hidden>
+  <div class="modal" role="dialog" aria-label="Sign in">
+    <h3 id="authTitle">Sign in — favourites on all your devices</h3>
+    <div id="authStep1">
+      <input id="authEmail" type="email" placeholder="your@email.com" autocomplete="email">
+      <button class="mgo" id="authSend">Email me a code</button>
+    </div>
+    <div id="authStep2" hidden>
+      <input id="authCode" type="text" inputmode="numeric" maxlength="6" placeholder="6-digit code" autocomplete="one-time-code">
+      <button class="mgo" id="authVerify">Sign in</button>
+    </div>
+    <div class="mnote" id="authNote"></div>
+    <button class="mcancel" id="authCancel">Cancel</button>
+  </div>
+</div>
+
 <div class="modal-backdrop" id="reportModal" hidden>
   <div class="modal" role="dialog" aria-label="Report a problem with this result">
     <h3>What's wrong with this one?</h3>
@@ -374,6 +417,8 @@
 </div>
 
 <script>
+const BUILD='wdw-20260807-b';
+console.log('Why Don\'t We? build:', BUILD);
 const ROW = 38;
 const SPINNERS = {
   cost: { options:[
@@ -658,7 +703,7 @@ function renderAlso(){
   };
   const first=vs.slice(0,6), rest=vs.slice(6);
   zone.innerHTML=`<div class="also">
-      <h4>You may also like</h4>
+      <span class="also-pill">You may also like</span>
       <div class="cap">We haven't fully scanned these, but they might also be fun.</div>
       ${first.map(row).join('')}
       <div id="alsoRest" hidden>${rest.map(row).join('')}</div>
@@ -690,7 +735,8 @@ stage.addEventListener('click', e=>{
         name:nm, url:bk.href, category:it.category||'', gem:!!it.gem,
         loc:(lastCtx&&lastCtx.loc)||'', day
       });
-      if(navigator.sendBeacon){ navigator.sendBeacon('/api/click', new Blob([payload],{type:'application/json'})); }
+      if(AUTH&&AUTH.token){ fetch('/api/click',{method:'POST',headers:{'Content-Type':'application/json',...authHeaders()},body:payload,keepalive:true}).catch(()=>{}); }
+      else if(navigator.sendBeacon){ navigator.sendBeacon('/api/click', new Blob([payload],{type:'application/json'})); }
       else{ fetch('/api/click',{method:'POST',headers:{'Content-Type':'application/json'},body:payload,keepalive:true}).catch(()=>{}); }
     }catch{}
     return; // link proceeds normally
@@ -718,6 +764,90 @@ reportModal.addEventListener('click', e=>{
 });
 document.addEventListener('keydown', e=>{ if(e.key==='Escape' && !reportModal.hidden){ pendingCard=null; reportModal.hidden=true; } });
 
+/* ---- sign in (email code) ---- */
+let AUTH=null;
+try{ AUTH=JSON.parse(localStorage.getItem('wdw_auth')||'null'); }catch{}
+const authBtn=document.getElementById('authBtn');
+const authModal=document.getElementById('authModal');
+const authNote=document.getElementById('authNote');
+function authHeaders(){ return AUTH&&AUTH.token ? {'Authorization':'Bearer '+AUTH.token} : {}; }
+function paintAuth(){
+  authBtn.textContent = AUTH ? ('\u2713 '+(AUTH.email.length>22?AUTH.email.slice(0,20)+'\u2026':AUTH.email)) : 'Sign in';
+  authBtn.title = AUTH ? 'Signed in \u2014 tap to sign out' : 'Sign in to keep favourites on all your devices';
+}
+paintAuth();
+authBtn.addEventListener('click', ()=>{
+  if(AUTH){
+    if(confirm('Sign out of '+AUTH.email+'?')){
+      AUTH=null; try{localStorage.removeItem('wdw_auth');}catch{}
+      paintAuth();
+    }
+    return;
+  }
+  document.getElementById('authStep1').hidden=false;
+  document.getElementById('authStep2').hidden=true;
+  authNote.textContent='';
+  authModal.hidden=false;
+  document.getElementById('authEmail').focus();
+});
+document.getElementById('authCancel').addEventListener('click', ()=>{ authModal.hidden=true; });
+authModal.addEventListener('click', e=>{ if(e.target===authModal) authModal.hidden=true; });
+
+document.getElementById('authSend').addEventListener('click', async ()=>{
+  const email=document.getElementById('authEmail').value.trim();
+  if(!email){ authNote.textContent='Pop your email in first'; return; }
+  const b=document.getElementById('authSend'); b.disabled=true; authNote.textContent='Sending\u2026';
+  try{
+    const r=await fetch('/api/auth-start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
+    const d=await r.json();
+    if(!r.ok||d.error) throw new Error(d.error||'Couldn\u2019t send the code');
+    document.getElementById('authStep1').hidden=true;
+    document.getElementById('authStep2').hidden=false;
+    authNote.textContent='Code sent \u2014 check your inbox (and spam, first time)';
+    document.getElementById('authCode').focus();
+  }catch(e){ authNote.textContent=e.message; }
+  b.disabled=false;
+});
+document.getElementById('authVerify').addEventListener('click', async ()=>{
+  const email=document.getElementById('authEmail').value.trim();
+  const code=document.getElementById('authCode').value.trim();
+  const b=document.getElementById('authVerify'); b.disabled=true; authNote.textContent='Checking\u2026';
+  try{
+    const r=await fetch('/api/auth-verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,code})});
+    const d=await r.json();
+    if(!r.ok||d.error) throw new Error(d.error||'That didn\u2019t work');
+    AUTH={token:d.token,email:d.email};
+    try{localStorage.setItem('wdw_auth',JSON.stringify(AUTH));}catch{}
+    paintAuth();
+    authModal.hidden=true;
+    syncFavsOnLogin();
+  }catch(e){ authNote.textContent=e.message; }
+  b.disabled=false;
+});
+
+async function syncFavsOnLogin(){
+  try{
+    const r=await fetch('/api/favs',{headers:authHeaders()});
+    if(r.status===401){ AUTH=null; try{localStorage.removeItem('wdw_auth');}catch{} paintAuth(); return; }
+    const d=await r.json();
+    // merge cloud + local by name, then push the union back
+    (d.items||[]).forEach(it=>{ if(it.name&&!FAVS.has(it.name)) FAVS.set(it.name,it); });
+    favPersist(); updateFavBtn();
+    pushFavs();
+    if(inFavs) renderFavs();
+  }catch(e){ console.error('fav sync:', e); }
+}
+let pushT=null;
+function pushFavs(){
+  if(!AUTH) return;
+  clearTimeout(pushT);
+  pushT=setTimeout(()=>{
+    fetch('/api/favs',{method:'POST',headers:{'Content-Type':'application/json',...authHeaders()},
+      body:JSON.stringify({items:[...FAVS.values()]})}).catch(()=>{});
+  }, 800);
+}
+if(AUTH) syncFavsOnLogin();
+
 /* ---- favourites ---- */
 const RESULTS={};
 let inFavs=false, prevStageHTML=null;
@@ -743,7 +873,7 @@ function toggleFav(card){
     if(!it) return;
     FAVS.set(name, {...it, savedLoc:(lastCtx&&lastCtx.loc)||'', savedDay:(lastCtx&&lastCtx.dayLabel)||''});
   }
-  favPersist(); updateFavBtn();
+  favPersist(); updateFavBtn(); pushFavs();
   if(inFavs){ renderFavs(); }
   else{ const b=card.querySelector('.save'); if(b) b.classList.toggle('on', FAVS.has(name)); }
 }
