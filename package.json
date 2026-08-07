@@ -5,6 +5,6 @@
   "type": "module",
   "description": "Same-day family day-out finder",
   "dependencies": {
-    "@vercel/analytics": "^2.0.1"
+    "redis": "^4.7.0"
   }
 }
