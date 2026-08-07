@@ -387,7 +387,7 @@
 
   <div class="stage" id="stage" aria-live="polite"></div>
 
-  <footer>Results are found live on the web for today's date. Always check times and availability on the venue's page before heading out. <span style="opacity:.45">· wdw-20260807-e</span></footer>
+  <footer>Results are found live on the web for today's date. Always check times and availability on the venue's page before heading out. <span style="opacity:.45">· wdw-20260807-f</span></footer>
 <div class="modal-backdrop" id="authModal" hidden>
   <div class="modal" role="dialog" aria-label="Sign in">
     <h3 id="authTitle">Remember me retains Favourites and other preferences</h3>
@@ -417,7 +417,7 @@
 </div>
 
 <script>
-const BUILD='wdw-20260807-e';
+const BUILD='wdw-20260807-f';
 console.log('Why Don\'t We? build:', BUILD);
 const ROW = 38;
 const SPINNERS = {
@@ -604,7 +604,7 @@ async function findFun(append){
           dist: DIST_KEYS[SPINNERS.dist.idx],
           setting: SET_KEYS[SPINNERS.set.idx],
           depth,
-          excluded: shown,
+          excluded: append ? Array.from(new Set([...shown, ...DAYNO])) : shown,
           day
         })
       });
@@ -613,7 +613,35 @@ async function findFun(append){
     catch(e){ console.error('WDW parse phase:', e); throw new Error('The server had a hiccup — try again'); }
     if(!response.ok || data.error) throw new Error(data.error||'Search failed — try again');
 
-    let items=(data.items||[]).filter(it=>!shown.includes(it.name)).slice(0,5);
+    let items=(data.items||[]).filter(it=>!shown.includes(it.name));
+    // "not today" filter — applied client-side so shared cached batches stay shared
+    const preFilter=items.length;
+    items=items.filter(it=>!DAYNOL.has(String(it.name||'').toLowerCase()));
+    if(!append && items.length<5 && preFilter>items.length){
+      // today's thumbs thinned a cached batch — quietly top it up before showing
+      try{
+        const r2=await fetch('/api/find',{method:'POST',headers:{'Content-Type':'application/json',...authHeaders()},
+          body:JSON.stringify({
+            loc,
+            cost: COST_KEYS[SPINNERS.cost.idx],
+            dist: DIST_KEYS[SPINNERS.dist.idx],
+            setting: SET_KEYS[SPINNERS.set.idx],
+            depth,
+            excluded: Array.from(new Set([...shown, ...items.map(i=>i.name), ...DAYNO])),
+            count: Math.min(5-items.length,4)||1,
+            dismissed: DAYNO.slice(0,30),
+            day
+          })});
+        const d2=await r2.json();
+        if(r2.ok && !d2.error){
+          (d2.items||[]).forEach(it=>{
+            const l=String(it.name||'').toLowerCase();
+            if(items.length<5 && !shown.includes(it.name) && !DAYNOL.has(l) && !items.some(x=>x.name===it.name)) items.push(it);
+          });
+        }
+      }catch(e){ console.error('WDW day top-up:', e); }
+    }
+    items=items.slice(0,5);
     if(items.length===0) throw new Error('No results came back — try again');
     items.forEach(it=>shown.push(it.name));
     depth++;
@@ -763,6 +791,21 @@ reportModal.addEventListener('click', e=>{
   if(opt && pendingCard){ const c=pendingCard; pendingCard=null; reportModal.hidden=true; dismissCard(c, opt.dataset.reason); }
 });
 document.addEventListener('keydown', e=>{ if(e.key==='Escape' && !reportModal.hidden){ pendingCard=null; reportModal.hidden=true; } });
+
+/* ---- "not today": thumbs-downs stay hidden until midnight UK ---- */
+function ukDay(){ return new Date().toLocaleDateString('en-CA',{timeZone:'Europe/London'}); }
+let DAYNO=[], DAYNOL=new Set();
+try{
+  const d=JSON.parse(localStorage.getItem('wdw_no')||'null');
+  if(d && d.date===ukDay() && Array.isArray(d.names)){ DAYNO=d.names.slice(0,40); DAYNOL=new Set(DAYNO.map(s=>String(s).toLowerCase())); }
+}catch{}
+function noteDayNo(name){
+  if(!name) return;
+  const l=String(name).toLowerCase();
+  if(DAYNOL.has(l)) return;
+  DAYNO.push(name); DAYNOL.add(l);
+  try{ localStorage.setItem('wdw_no', JSON.stringify({date:ukDay(), names:DAYNO.slice(0,40)})); }catch{}
+}
 
 /* ---- sign in (email code) ---- */
 let AUTH=null;
@@ -928,6 +971,7 @@ function exitFavs(){
 async function dismissCard(card, reason){
   if(!card) return;
   const name=card.dataset.name||'';
+  if(reason!=='dead_link') noteDayNo(name); // hidden until midnight (dead links may return rescued)
   if(reason==='dead_link'){ const i=shown.indexOf(name); if(i>-1) shown.splice(i,1); }
   card.classList.add('leaving');
   setTimeout(()=>card.remove(), 260);
@@ -947,14 +991,14 @@ async function dismissCard(card, reason){
   try{
     const response=await fetch('/api/find',{
       method:'POST',
-      headers:{'Content-Type':'application/json'},
+      headers:{'Content-Type':'application/json',...authHeaders()},
       body:JSON.stringify({
         loc,
         cost: COST_KEYS[SPINNERS.cost.idx],
         dist: DIST_KEYS[SPINNERS.dist.idx],
         setting: SET_KEYS[SPINNERS.set.idx],
         depth,
-        excluded: shown,
+        excluded: Array.from(new Set([...shown, ...DAYNO])),
         count: 1,
         dismissed: reason ? null : name,
         reported: reason ? name : null,
