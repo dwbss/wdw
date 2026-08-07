@@ -104,7 +104,7 @@ async function callClaude(prompt, tools, withFetchBeta) {
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers,
-      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 3500, messages, tools })
+      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 4200, messages, tools })
     });
     last = await r.json();
     if (last.error) return { error: last.error };
@@ -126,11 +126,11 @@ async function callClaude(prompt, tools, withFetchBeta) {
 
   // "Pens down": if the dig ran out of turns (or never emitted the list),
   // force a final answer from what's already been gathered — no more tools.
-  if (last && !last.error && (last.stop_reason === 'pause_turn' || !collected.includes('['))) {
+  if (last && !last.error && (last.stop_reason === 'pause_turn' || last.stop_reason === 'max_tokens' || !parseItems(collected))) {
     try {
       const wrapMsgs = lastAppended
-        ? [...messages, { role: 'user', content: 'STOP searching. Using ONLY what you have already gathered, output the final raw JSON array now — nothing else.' }]
-        : [...messages, { role: 'assistant', content: last.content }, { role: 'user', content: 'STOP searching. Using ONLY what you have already gathered, output the final raw JSON array now — nothing else.' }];
+        ? [...messages, { role: 'user', content: 'STOP searching. Using ONLY what you have already gathered, output the COMPLETE final raw JSON array now, from the opening [ to the closing ] — valid JSON, nothing else.' }]
+        : [...messages, { role: 'assistant', content: last.content }, { role: 'user', content: 'STOP searching. Using ONLY what you have already gathered, output the COMPLETE final raw JSON array now, from the opening [ to the closing ] — valid JSON, nothing else.' }];
       const wr = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers,
