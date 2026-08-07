@@ -4,6 +4,7 @@
 
 import { VENUES } from './_venues.js';
 import { SOURCE_PACKS } from './_sources.js';
+import { kvGet as storeGet, kvSet as storeSet, kvAvailable } from './_kv.js';
 
 // Allow up to 60s — the multi-stage search needs longer than Vercel's 10s default
 export const maxDuration = 60;
@@ -13,36 +14,15 @@ export const maxDuration = 60;
 const CACHE = new Map();
 function memGet(k) { const e = CACHE.get(k); if (e && Date.now() < e.exp) return e.v; CACHE.delete(k); return null; }
 function memSet(k, v, ttl) { if (CACHE.size > 200) CACHE.clear(); CACHE.set(k, { v, exp: Date.now() + ttl }); }
-// Shared cache via Redis REST (Vercel Storage / Upstash) when configured;
-// falls back to per-instance memory when not. Zero dependencies.
-const KV_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL || null;
-const KV_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || null;
+// Shared cache: delegates to the storage layer (_kv.js — speaks both Redis
+// dialects); falls back to per-instance memory when no storage is configured.
+console.log('cache backend:', kvAvailable() ? 'redis' : 'memory-only');
 async function cacheGet(k) {
-  if (KV_URL && KV_TOKEN) {
-    try {
-      const r = await fetch(KV_URL, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${KV_TOKEN}`, 'content-type': 'application/json' },
-        body: JSON.stringify(['GET', k])
-      });
-      const d = await r.json();
-      if (d && d.result) return JSON.parse(d.result);
-      return null;
-    } catch (e) { console.error('kv get failed:', e.message); }
-  }
+  if (kvAvailable()) return await storeGet(k);
   return memGet(k);
 }
 async function cacheSet(k, v, ttlMs) {
-  if (KV_URL && KV_TOKEN) {
-    try {
-      await fetch(KV_URL, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${KV_TOKEN}`, 'content-type': 'application/json' },
-        body: JSON.stringify(['SET', k, JSON.stringify(v), 'EX', String(Math.round(ttlMs / 1000))])
-      });
-      return;
-    } catch (e) { console.error('kv set failed:', e.message); }
-  }
+  if (kvAvailable()) { await storeSet(k, v, Math.max(1, Math.round(ttlMs / 1000))); return; }
   memSet(k, v, ttlMs);
 }
 // Geography + map sweep, cached so nothing is looked up twice
