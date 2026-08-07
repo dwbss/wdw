@@ -10,14 +10,40 @@ const KV_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST
 
 export function kvAvailable() { return !!(REDIS_URL || (KV_URL && KV_TOKEN)); }
 
+function withTimeout(p, ms) {
+  return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
+}
+
 let client = null;
+let coolOffUntil = 0; // after a failed connect, stop trying for a while
+async function tryConnect(url) {
+  const c = createClient({ url, socket: { connectTimeout: 2500, reconnectStrategy: false } });
+  c.on('error', e => console.error('redis:', e.message));
+  await c.connect();
+  return c;
+}
 async function getClient() {
   if (!REDIS_URL) return null;
   if (client && client.isOpen) return client;
-  client = createClient({ url: REDIS_URL });
-  client.on('error', e => console.error('redis:', e.message));
-  await client.connect();
-  return client;
+  if (Date.now() < coolOffUntil) return null;
+  try {
+    client = await withTimeout(tryConnect(REDIS_URL), 3000);
+    console.log('redis connected');
+    return client;
+  } catch (e1) {
+    console.error('redis connect failed:', e1.message);
+    // common cause: database requires TLS — retry once encrypted
+    if (REDIS_URL.startsWith('redis://')) {
+      try {
+        client = await withTimeout(tryConnect(REDIS_URL.replace('redis://', 'rediss://')), 3000);
+        console.log('redis connected (tls)');
+        return client;
+      } catch (e2) { console.error('redis tls connect failed:', e2.message); }
+    }
+    client = null;
+    coolOffUntil = Date.now() + 60000; // give it a minute; serve uncached meanwhile
+    return null;
+  }
 }
 
 async function restCmd(parts) {
@@ -32,7 +58,7 @@ async function restCmd(parts) {
 export async function kvGet(k) {
   try {
     const c = await getClient();
-    if (c) { const v = await c.get(k); return v ? JSON.parse(v) : null; }
+    if (c) { const v = await withTimeout(c.get(k), 1500); return v ? JSON.parse(v) : null; }
     if (KV_URL && KV_TOKEN) { const d = await restCmd(['GET', k]); return d && d.result ? JSON.parse(d.result) : null; }
   } catch (e) { console.error('kv get:', e.message); }
   return null;
@@ -40,7 +66,7 @@ export async function kvGet(k) {
 export async function kvSet(k, v, ttlSec) {
   try {
     const c = await getClient();
-    if (c) { await c.set(k, JSON.stringify(v), { EX: ttlSec }); return; }
+    if (c) { await withTimeout(c.set(k, JSON.stringify(v), { EX: ttlSec }), 1500); return; }
     if (KV_URL && KV_TOKEN) { await restCmd(['SET', k, JSON.stringify(v), 'EX', String(ttlSec)]); return; }
     console.error('kv set: no storage configured');
   } catch (e) { console.error('kv set:', e.message); }
@@ -48,7 +74,7 @@ export async function kvSet(k, v, ttlSec) {
 export async function kvDel(k) {
   try {
     const c = await getClient();
-    if (c) { await c.del(k); return; }
+    if (c) { await withTimeout(c.del(k), 1500); return; }
     if (KV_URL && KV_TOKEN) { await restCmd(['DEL', k]); }
   } catch (e) { console.error('kv del:', e.message); }
 }

@@ -18,12 +18,15 @@ function memSet(k, v, ttl) { if (CACHE.size > 200) CACHE.clear(); CACHE.set(k, {
 // dialects); falls back to per-instance memory when no storage is configured.
 console.log('cache backend:', kvAvailable() ? 'redis' : 'memory-only');
 async function cacheGet(k) {
-  if (kvAvailable()) return await storeGet(k);
+  if (kvAvailable()) {
+    const v = await storeGet(k);
+    if (v !== null) return v;
+  }
   return memGet(k);
 }
 async function cacheSet(k, v, ttlMs) {
-  if (kvAvailable()) { await storeSet(k, v, Math.max(1, Math.round(ttlMs / 1000))); return; }
-  memSet(k, v, ttlMs);
+  memSet(k, v, ttlMs); // local always; shared when reachable
+  if (kvAvailable()) await storeSet(k, v, Math.max(1, Math.round(ttlMs / 1000)));
 }
 // Geography + map sweep, cached so nothing is looked up twice
 async function getGeo(loc) {
