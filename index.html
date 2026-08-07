@@ -344,7 +344,7 @@
     <h1>Why don't we<span class="q">?</span></h1>
     <p>Designed for parents who are looking for fun things to do with the kids today.</p>
     <div class="toprow">
-      <button class="authbtn" id="authBtn">Sign in</button>
+      <button class="authbtn" id="authBtn">Remember me</button>
       <button class="favbtn" id="favBtn" hidden>♥ Favourites (0)</button>
     </div>
   </header>
@@ -387,10 +387,10 @@
 
   <div class="stage" id="stage" aria-live="polite"></div>
 
-  <footer>Results are found live on the web for today's date. Always check times and availability on the venue's page before heading out. <span style="opacity:.45">· wdw-20260807-b</span></footer>
+  <footer>Results are found live on the web for today's date. Always check times and availability on the venue's page before heading out. <span style="opacity:.45">· wdw-20260807-c</span></footer>
 <div class="modal-backdrop" id="authModal" hidden>
   <div class="modal" role="dialog" aria-label="Sign in">
-    <h3 id="authTitle">Sign in — favourites on all your devices</h3>
+    <h3 id="authTitle">Remember me — favourites on all your devices</h3>
     <div id="authStep1">
       <input id="authEmail" type="email" placeholder="your@email.com" autocomplete="email">
       <button class="mgo" id="authSend">Email me a code</button>
@@ -417,7 +417,7 @@
 </div>
 
 <script>
-const BUILD='wdw-20260807-b';
+const BUILD='wdw-20260807-c';
 console.log('Why Don\'t We? build:', BUILD);
 const ROW = 38;
 const SPINNERS = {
@@ -772,8 +772,8 @@ const authModal=document.getElementById('authModal');
 const authNote=document.getElementById('authNote');
 function authHeaders(){ return AUTH&&AUTH.token ? {'Authorization':'Bearer '+AUTH.token} : {}; }
 function paintAuth(){
-  authBtn.textContent = AUTH ? ('\u2713 '+(AUTH.email.length>22?AUTH.email.slice(0,20)+'\u2026':AUTH.email)) : 'Sign in';
-  authBtn.title = AUTH ? 'Signed in \u2014 tap to sign out' : 'Sign in to keep favourites on all your devices';
+  authBtn.textContent = AUTH ? ('\u2713 '+(AUTH.email.length>22?AUTH.email.slice(0,20)+'\u2026':AUTH.email)) : 'Remember me';
+  authBtn.title = AUTH ? 'Remembered \u2014 tap to sign out' : 'So your favourites are on all your devices';
 }
 paintAuth();
 authBtn.addEventListener('click', ()=>{
