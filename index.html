@@ -387,10 +387,10 @@
 
   <div class="stage" id="stage" aria-live="polite"></div>
 
-  <footer>Results are found live on the web for today's date. Always check times and availability on the venue's page before heading out. <span style="opacity:.45">· wdw-20260807-c</span></footer>
+  <footer>Results are found live on the web for today's date. Always check times and availability on the venue's page before heading out. <span style="opacity:.45">· wdw-20260807-e</span></footer>
 <div class="modal-backdrop" id="authModal" hidden>
   <div class="modal" role="dialog" aria-label="Sign in">
-    <h3 id="authTitle">Remember me — favourites on all your devices</h3>
+    <h3 id="authTitle">Remember me retains Favourites and other preferences</h3>
     <div id="authStep1">
       <input id="authEmail" type="email" placeholder="your@email.com" autocomplete="email">
       <button class="mgo" id="authSend">Email me a code</button>
@@ -417,7 +417,7 @@
 </div>
 
 <script>
-const BUILD='wdw-20260807-c';
+const BUILD='wdw-20260807-e';
 console.log('Why Don\'t We? build:', BUILD);
 const ROW = 38;
 const SPINNERS = {
@@ -803,7 +803,7 @@ document.getElementById('authSend').addEventListener('click', async ()=>{
     if(!r.ok||d.error) throw new Error(d.error||'Couldn\u2019t send the code');
     document.getElementById('authStep1').hidden=true;
     document.getElementById('authStep2').hidden=false;
-    authNote.textContent='Code sent \u2014 check your inbox (and spam, first time)';
+    authNote.textContent='Code sent \u2014 check your inbox (and spam)';
     document.getElementById('authCode').focus();
   }catch(e){ authNote.textContent=e.message; }
   b.disabled=false;
