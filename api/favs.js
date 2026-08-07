@@ -28,6 +28,7 @@ export default async function handler(req, res) {
       savedDay: String(it.savedDay || '').slice(0, 20)
     }));
     await kvSet(key, items, 365 * 24 * 3600);
+    console.log(JSON.stringify({ event: 'favs_saved', uid: session.uid, count: items.length, at: new Date().toISOString() }));
     return res.status(200).json({ ok: true, count: items.length });
   }
   return res.status(405).json({ error: 'method not allowed' });

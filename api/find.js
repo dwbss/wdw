@@ -4,7 +4,7 @@
 
 import { VENUES } from './_venues.js';
 import { SOURCE_PACKS } from './_sources.js';
-import { kvGet as storeGet, kvSet as storeSet, kvAvailable } from './_kv.js';
+import { kvGet as storeGet, kvSet as storeSet, kvAvailable, getSession } from './_kv.js';
 
 // Allow up to 60s — the multi-stage search needs longer than Vercel's 10s default
 export const maxDuration = 60;
@@ -335,11 +335,13 @@ export default async function handler(req, res) {
     ? Math.min(Math.max(parseInt(count, 10) || 4, 1), 4)
     : Math.min(Math.max(parseInt(count, 10) || 5, 1), 5);
 
-  // Feedback loop v1: every dismissal lands in the Vercel function logs.
-  // (Project → Logs). Upgrade path: write to Vercel KV / a spreadsheet later.
+  // Feedback loop: every signal lands in the logs, with the anonymous user
+  // id when signed in — the raw material for per-family memory later.
+  const sess = (dismissed || reported) ? await getSession(req).catch(() => null) : null;
   if (dismissed && typeof dismissed === 'string') {
     console.log(JSON.stringify({
       event: 'thumbs_down',
+      uid: sess ? sess.uid : null,
       name: dismissed.slice(0, 120),
       loc: safeLoc, cost, dist, setting,
       at: new Date().toISOString()
@@ -349,6 +351,7 @@ export default async function handler(req, res) {
   if (reported && typeof reported === 'string') {
     console.log(JSON.stringify({
       event: 'reported',
+      uid: sess ? sess.uid : null,
       reason: safeReason || 'unspecified',
       name: reported.slice(0, 120),
       loc: safeLoc, cost, dist, setting,
