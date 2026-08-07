@@ -2,11 +2,15 @@
 // A click is the strongest preference signal a family gives; this banks it
 // in the logs alongside thumbs, reports and favourites for later learning.
 
+import { getSession } from './_kv.js';
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'method not allowed' });
   const b = req.body || {};
+  const session = await getSession(req).catch(() => null);
   console.log(JSON.stringify({
     event: 'booking_click',
+    uid: session ? session.uid : null,
     name: String(b.name || '').slice(0, 120),
     url: String(b.url || '').slice(0, 300),
     category: String(b.category || '').slice(0, 40),
