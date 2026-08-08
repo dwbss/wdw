@@ -157,6 +157,11 @@
   .card.gem{border-color:var(--gem);background:linear-gradient(0deg,var(--gem-soft) 0,var(--surface) 55%)}
   .card .top{display:flex;gap:10px;align-items:flex-start;justify-content:space-between}
   .card h3{font-size:16.5px;font-weight:800;line-height:1.3;letter-spacing:-.01em}
+  .once-badge{
+    flex:0 0 auto;font-size:11px;font-weight:800;letter-spacing:.04em;
+    color:#e04f2f;background:#fdeeea;border:1px solid #e04f2f;
+    padding:3px 9px;border-radius:999px;white-space:nowrap;
+  }
   .gem-badge{
     flex:0 0 auto;font-size:11px;font-weight:800;letter-spacing:.04em;
     color:var(--gem);background:var(--gem-soft);border:1px solid var(--gem);
@@ -274,6 +279,7 @@
   #more:hover{border-color:#c8c6be}
   #more:disabled{opacity:.55;cursor:wait}
   .dig-note{text-align:center;font-size:12.5px;color:var(--ink-soft);font-weight:600;margin-top:10px}
+  .loadsub{margin-top:9px;font-size:12px;color:var(--ink-soft);font-weight:600;opacity:.85;text-align:center}
   .also{
     background:#f7fafe;border:2px solid var(--accent);border-radius:16px;
     padding:16px 16px 8px;margin-top:24px;
@@ -387,7 +393,7 @@
 
   <div class="stage" id="stage" aria-live="polite"></div>
 
-  <footer>Results are found live on the web for today's date. Always check times and availability on the venue's page before heading out. <span style="opacity:.45">· wdw-20260807-f</span></footer>
+  <footer>Results are found live on the web for today's date. Always check times and availability on the venue's page before heading out. <span style="opacity:.45">· wdw-20260807-h</span></footer>
 <div class="modal-backdrop" id="authModal" hidden>
   <div class="modal" role="dialog" aria-label="Sign in">
     <h3 id="authTitle">Remember me retains Favourites and other preferences</h3>
@@ -417,7 +423,7 @@
 </div>
 
 <script>
-const BUILD='wdw-20260807-f';
+const BUILD='wdw-20260807-h';
 console.log('Why Don\'t We? build:', BUILD);
 const ROW = 38;
 const SPINNERS = {
@@ -518,6 +524,7 @@ locBtn.addEventListener('click', async ()=>{
   try{
     document.getElementById('loc').value = await getLocation();
     locTxt.textContent='Find my location';
+    speculate();
   }catch{
     locTxt.textContent='Couldn\u2019t get your location — type it instead';
   }
@@ -526,6 +533,49 @@ locBtn.addEventListener('click', async ()=>{
 
 /* ---- search ---- */
 let shown=[], depth=0, lastCtx=null, day='today', nearbyVenues=[];
+
+/* ---- silent pre-warm: cache the free stages (geography + map) on arrival ---- */
+(async ()=>{
+  try{
+    const c=await ipLocate(); // town-level, no permission prompt, nothing shown
+    if(c) fetch('/api/find',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({loc:c, cost:'either', dist:'10', setting:'either', mode:'quick'})}).catch(()=>{});
+  }catch{}
+})();
+
+/* ---- speculative search: start digging the moment a location is set ---- */
+let SPEC=null;
+function specKey(loc){
+  return [String(loc).trim().toLowerCase(),
+    ['free','paid','either'][SPINNERS.cost.idx],
+    ['5','10','25'][SPINNERS.dist.idx],
+    ['indoor','outdoor','either'][SPINNERS.set.idx],
+    day].join('|');
+}
+function speculate(){
+  const loc=document.getElementById('loc').value.trim();
+  if(loc.length<3 || inFavs) return;
+  const key=specKey(loc);
+  if(SPEC && SPEC.key===key) return;
+  SPEC={key, promise:
+    fetch('/api/find',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        loc,
+        cost:['free','paid','either'][SPINNERS.cost.idx],
+        dist:['5','10','25'][SPINNERS.dist.idx],
+        setting:['indoor','outdoor','either'][SPINNERS.set.idx],
+        depth:0, excluded:[], day
+      })})
+      .then(async r=>({ok:r.ok, data:await r.json().catch(()=>({}))}))
+      .catch(()=>null)
+  };
+}
+{
+  const locInput=document.getElementById('loc');
+  let specT=null;
+  locInput.addEventListener('input',()=>{ clearTimeout(specT); specT=setTimeout(speculate,2000); });
+  locInput.addEventListener('blur',()=>{ clearTimeout(specT); speculate(); });
+}
 
 document.querySelectorAll('.dayrow .day').forEach(b=>{
   b.addEventListener('click', ()=>{
@@ -569,7 +619,8 @@ async function findFun(append){
   let li=0;
   const loadEl=document.createElement('div');
   loadEl.className='loading';
-  loadEl.innerHTML=`<div class="bounce"><span></span><span></span><span></span></div><div id="loadline">${lines[0]}</div>`;
+  loadEl.innerHTML=`<div class="bounce"><span></span><span></span><span></span></div><div id="loadline">${lines[0]}</div>`
+    +(!append&&depth===0?`<div class="loadsub">First search in a new area takes ~30 seconds \u2014 after that, we remember.</div>`:'');
   if(append){ stage.querySelector('.more-zone')?.replaceChildren(loadEl); }
   else{ stage.replaceChildren(loadEl); }
   const ticker=setInterval(()=>{ li=(li+1)%lines.length; const p=document.getElementById('loadline'); if(p)p.textContent=lines[li]; },2600);
@@ -593,25 +644,33 @@ async function findFun(append){
   const SET_KEYS=['indoor','outdoor','either'];
 
   try{
-    let response, data;
-    try{
-      response=await fetch('/api/find',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({
-          loc,
-          cost: COST_KEYS[SPINNERS.cost.idx],
-          dist: DIST_KEYS[SPINNERS.dist.idx],
-          setting: SET_KEYS[SPINNERS.set.idx],
-          depth,
-          excluded: append ? Array.from(new Set([...shown, ...DAYNO])) : shown,
-          day
-        })
-      });
-    }catch(e){ console.error('WDW network phase:', e); throw new Error('network: '+(e&&e.message?e.message:String(e))); }
-    try{ data=await response.json(); }
-    catch(e){ console.error('WDW parse phase:', e); throw new Error('The server had a hiccup — try again'); }
-    if(!response.ok || data.error) throw new Error(data.error||'Search failed — try again');
+    let response=null, data=null;
+    // if a speculative search for exactly this question is already in flight, ride it
+    if(!append && depth===0 && SPEC && SPEC.key===specKey(loc)){
+      const sp=SPEC; SPEC=null;
+      const res=await sp.promise;
+      if(res && res.ok && res.data && !res.data.error){ data=res.data; console.log('WDW: served from speculative search'); }
+    }
+    if(!data){
+      try{
+        response=await fetch('/api/find',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({
+            loc,
+            cost: COST_KEYS[SPINNERS.cost.idx],
+            dist: DIST_KEYS[SPINNERS.dist.idx],
+            setting: SET_KEYS[SPINNERS.set.idx],
+            depth,
+            excluded: append ? Array.from(new Set([...shown, ...DAYNO])) : shown,
+            day
+          })
+        });
+      }catch(e){ console.error('WDW network phase:', e); throw new Error('network: '+(e&&e.message?e.message:String(e))); }
+      try{ data=await response.json(); }
+      catch(e){ console.error('WDW parse phase:', e); throw new Error('The server had a hiccup — try again'); }
+      if(!response.ok || data.error) throw new Error(data.error||'Search failed — try again');
+    }
 
     let items=(data.items||[]).filter(it=>!shown.includes(it.name));
     // "not today" filter — applied client-side so shared cached batches stay shared
@@ -925,7 +984,7 @@ function favCardHtml(it){
   const freeClass=/free/i.test(it.cost||'')?'tag free':'tag';
   const url=safeUrl(it.url);
   return `<div class="card ${it.gem?'gem':''}" data-name="${escapeHtml(it.name||'')}">
-    <div class="top"><h3>${escapeHtml(it.name||'')}</h3>${it.gem?'<span class="gem-badge">\u2728 Hidden gem</span>':''}</div>
+    <div class="top"><h3>${escapeHtml(it.name||'')}</h3>${it.once?'<span class="once-badge">\u23f3 Limited time</span>':(it.gem?'<span class="gem-badge">\u2728 Hidden gem</span>':'')}</div>
     <p>${escapeHtml(it.blurb||'')}</p>
     <div class="meta">
       <span class="${freeClass}">${escapeHtml(it.cost||'\u2014')}</span>
