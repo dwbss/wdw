@@ -568,6 +568,34 @@ Respond with ONLY a raw JSON array of ${missing + 1} objects with keys: "name","
     });
 
     // sanitise before returning
+    // TRUST BUT VERIFY: fetch each URL and confirm the page mentions the
+    // item. Homepage/generic links get swapped for a targeted search that
+    // lands one click from the real page. Unreachable pages keep the benefit
+    // of the doubt (many legit sites block bots).
+    if (items.length > 1 && (Date.now() - t0) < 45000) {
+      let swapped = 0;
+      await Promise.all(items.map(async it => {
+        if (!it || !it.url || !/^https?:\/\//i.test(it.url)) return;
+        try {
+          const ctl = new AbortController();
+          const tt = setTimeout(() => ctl.abort(), 3000);
+          const r = await fetch(it.url, { redirect: 'follow', signal: ctl.signal,
+            headers: { 'user-agent': 'Mozilla/5.0 (compatible; WhyDontWe/1.0; +https://www.whydontwe.uk)' } });
+          clearTimeout(tt);
+          if (!r.ok) return; // can't judge — keep
+          const html = (await r.text()).slice(0, 150000).toLowerCase();
+          const words = String(it.name || '').toLowerCase().split(/[^a-z0-9]+/).filter(w => w.length > 3);
+          if (!words.length) return;
+          const hits = words.filter(w => html.includes(w)).length;
+          if (hits < Math.min(2, words.length)) {
+            it.url = 'https://www.google.com/search?q=' + encodeURIComponent('"' + it.name + '" ' + (it.area || safeLoc));
+            swapped++;
+          }
+        } catch { /* unreachable — keep original */ }
+      }));
+      if (swapped) console.log(`url verify: swapped ${swapped}/${items.length} unverifiable links for targeted searches`);
+    }
+
     const clean = items.slice(0, n).map(it => ({
       name: String(it.name || '').slice(0, 120),
       category: String(it.category || '').slice(0, 40),
