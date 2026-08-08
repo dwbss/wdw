@@ -100,6 +100,8 @@ async function callClaude(prompt, tools, withFetchBeta) {
   let last = null;
   let lastAppended = false;
   let cost = { in: 0, out: 0, cacheRead: 0, cacheWrite: 0 };
+  const tStart = Date.now();
+  const BUDGET_MS = 34000; // wall-clock cap on tool turns; pens-down wraps whatever's gathered
   for (let i = 0; i < 3; i++) {
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -119,6 +121,7 @@ async function callClaude(prompt, tools, withFetchBeta) {
     if (last.stop_reason === 'pause_turn') {
       messages = [...messages, { role: 'assistant', content: last.content }];
       lastAppended = true;
+      if (Date.now() - tStart > BUDGET_MS) { console.log(`turn budget spent (${Date.now() - tStart}ms) — pens down`); break; }
       continue;
     }
     break;
@@ -389,7 +392,7 @@ export default async function handler(req, res) {
   const normLoc = ((geoForKey && geoForKey.district) || safeLoc).toLowerCase();
   const exHash = (excluded || []).slice().sort().join('|').slice(0, 200);
   const isCacheable = !dismissed && !reported && count !== 1;
-  const fullKey = `res2|${searchMode}|${normLoc}|${cost}|${dist}|${setting}|${safeDay}|${targetDate.toDateString()}|${exHash}`;
+  const fullKey = `res3|${searchMode}|${normLoc}|${cost}|${dist}|${setting}|${targetDate.toDateString()}|${exHash}`;
   if (isCacheable) {
     const hit = await cacheGet(fullKey);
     if (hit) { console.log(`cache HIT: ${fullKey.slice(0, 80)}`); return res.status(200).json({ items: hit, cached: true }); }
@@ -447,7 +450,8 @@ export default async function handler(req, res) {
   const sweepLine = swept.length
     ? `MAPPED VENUES inside the ${radiusMiles}-mile radius (from the map database — real places, but verify names/opening before recommending): ${swept.map(v => `${v.name} (${v.type}${v.miles != null ? `, ${v.miles}mi` : ''})`).join('; ')}.`
     : '';
-  const blendLine = `Aim for a MIX in the final 5: roughly half brilliant VENUES open ${dayWord} (farm parks, water slides, karting, soft play, swimming, trampoline parks — use the mapped venues list plus your searches) and half EVENTS on ${dayWord}. Variety of activity types across the 5 is essential.`;
+  const blendLine = `Aim for a MIX in the final 5: roughly half brilliant VENUES open ${dayWord} (farm parks, water slides, karting, soft play, swimming, trampoline parks — use the mapped venues list plus your searches) and half EVENTS on ${dayWord}. Variety of activity types across the 5 is essential.
+SCARCITY RULE — order the array by urgency: options that exist ONLY ${dayWord} or this weekend (festivals, fairs, one-off shows, touring events) come FIRST, short seasonal runs next, always-available venues last. A great one-day festival beats a great permanent venue every time — the venue will still be there next week; the festival won't. Never fabricate scarcity — if genuinely nothing time-limited is on, five great venues is the right answer.`;
 
   // Self-assembling source map: discover, then read, then hunt.
   // This is the UK-wide playbook — the same source TYPES exist everywhere,
@@ -455,7 +459,7 @@ export default async function handler(req, res) {
   const discoveryLine = `Work in three stages.
 STAGE 1 — DISCOVER this area's information map with quick searches (the same source types exist everywhere in the UK): the district/borough council events calendar${geo?.district ? ` (search "${geo.district} events")` : ''}; the town or parish council site; the destination site (search "visit ${safeLoc}" / "${safeLoc} what's on"); the local newspaper's what's-on section (search "${safeLoc} what's on this weekend" — local titles end in Herald, Observer, Argus, Echo, Gazette, Courier, Advertiser, or appear on InYourArea and SussexWorld-style county sites); the library service events page; "things to do with kids ${safeLoc} today" round-up articles.
 STAGE 2 — READ: use web_fetch to open the 2-3 most promising listing pages found in stage 1 and extract everything happening ${dayWord} that fits the criteria. This is where hidden gems live — small events appear on these pages and nowhere else.
-STAGE 3 — HUNT the gaps with targeted searches using event vocabulary and this month's seasonal specials.`;
+STAGE 3 — HUNT the gaps with targeted searches using event vocabulary and this month's seasonal specials. ALWAYS include one search shaped like "${safeLoc} festival OR fair this weekend" and check event platforms (Eventbrite-style listings, theatre and venue what's-on pages) — big one-day family events often appear ONLY there, and they are the single most valuable kind of result.`;
 
   // Seasonal intelligence: what "special" looks like this month
   const month = parseInt(new Intl.DateTimeFormat('en-GB', { month: 'numeric', timeZone: 'Europe/London' }).format(targetDate), 10);
@@ -483,7 +487,7 @@ ${excludedLine}
 URL RULE: every "url" must be the specific detail page for that exact item — the page a parent lands on and immediately sees THIS event or venue's details, times and booking. Copy it VERBATIM from your search or fetch results; never construct or guess a URL from memory. NEVER a homepage, never a generic what's-on or events listing page. If you only saw the item on a listing page, run one more search for its dedicated page; only if none exists may you use the most specific page that names it.
 HARD RULE: no two options may share the same category — one swimming pool, one bowling alley, one farm park etc. per list, never two.
 Respond with ONLY a raw JSON array (no markdown, no commentary) of the ${n === 1 ? 1 : n + 2} best options, ranked best first, each a DIFFERENT category. Each object has exactly these keys:
-"name" (string), "category" (2-3 word activity type, e.g. "swimming pool", "bowling", "farm park", "fete", "museum"), "blurb" (string, max 18 words, why it's great today), "cost" ("Free" or short price like "£8 adult"), "setting" ("Indoor"|"Outdoor"|"Both"), "area" (short place name), "url" (see URL RULE above), "time" (short like "10:00–16:00"), "gem" (true if a small one-off low-publicity local find, else false).
+"name" (string), "category" (2-3 word activity type, e.g. "swimming pool", "bowling", "farm park", "fete", "museum"), "blurb" (string, max 18 words, why it's great today), "cost" ("Free" or short price like "£8 adult"), "setting" ("Indoor"|"Outdoor"|"Both"), "area" (short place name), "url" (see URL RULE above), "time" (short like "10:00–16:00"), "once" (true ONLY if it runs ${dayWord} or a limited stretch of days — never for permanent venues), "gem" (true if a small one-off low-publicity local find, else false).
 Keep it compact. Only include options genuinely available ${dayWord}.`;
 
   try {
@@ -536,7 +540,7 @@ Criteria: ${COSTS[cost]}; ${DISTS[dist]} of ${safeLoc}; ${SETTINGS[setting]} pre
 ${seasonLine}
 Find ${missing + 1} MORE options, quickly — a couple of searches at most. Each must be a DIFFERENT category of activity from the others and from these already-found items: ${exclNames.join('; ')}. Do NOT repeat any of them.
 URL RULE: every "url" must be the specific detail page for that exact item, copied verbatim from your results — never a homepage or listings index.
-Respond with ONLY a raw JSON array of ${missing + 1} objects with keys: "name","category","blurb" (max 18 words),"cost","setting" ("Indoor"|"Outdoor"|"Both"),"area","url","time","gem" (boolean). Only options genuinely available ${dayWord}.`;
+Respond with ONLY a raw JSON array of ${missing + 1} objects with keys: "name","category","blurb" (max 18 words),"cost","setting" ("Indoor"|"Outdoor"|"Both"),"area","url","time","once" (boolean: true ONLY if the option runs ${dayWord} or a limited stretch of days — never for permanent venues), "gem" (boolean). Only options genuinely available ${dayWord}.`;
       try {
         const topData = await callClaude(topPrompt, [{ ...searchTool, max_uses: 3 }], false);
         if (!topData.error) {
@@ -576,7 +580,8 @@ Respond with ONLY a raw JSON array of ${missing + 1} objects with keys: "name","
       gem: Boolean(it.gem)
     }));
 
-    if (isCacheable && clean.length >= n) await cacheSet(fullKey, clean, 2 * 3600 * 1000);
+    const ttlMs = (safeExcluded.length === 0 && safeDepth === 0) ? 10 * 3600 * 1000 : 2 * 3600 * 1000;
+    if (isCacheable && clean.length >= n) await cacheSet(fullKey, clean, ttlMs);
     else if (isCacheable) console.log(`partial batch (${clean.length}/${n}) — served but NOT cached`);
     return res.status(200).json({ items: clean });
   } catch (err) {
