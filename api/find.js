@@ -40,12 +40,24 @@ async function getGeo(loc) {
 }
 async function getSweep(loc, geo, distMiles) {
   if (!geo || geo.lat == null) return [];
-  const k = `sweep|${(geo.district || loc).toLowerCase()}|${distMiles}`;
+  const k = `sweep2|${(geo.district || loc).toLowerCase()}|${distMiles}`;
   const hit = await cacheGet(k);
-  if (hit) return hit; // note: a cached [] means "recently failed — don't hammer the mirrors"
+  const now = Date.now();
+  if (hit && Array.isArray(hit.v)) {
+    if (hit.v.length) {
+      // stale-while-revalidate: past 24h, serve the old map and refresh quietly
+      if (now - hit.at > 24 * 3600 * 1000) {
+        sweepVenues(geo.lat, geo.lon, distMiles)
+          .then(sw => { if (sw.length) cacheSet(k, { at: Date.now(), v: sw }, 7 * 24 * 3600 * 1000); })
+          .catch(() => {});
+      }
+      return hit.v;
+    }
+    if (now - hit.at < 10 * 60 * 1000) return []; // recent failure — let the mirrors breathe
+  }
   const swept = await sweepVenues(geo.lat, geo.lon, distMiles);
-  // successes live a day; failures are remembered briefly so retries back off
-  await cacheSet(k, swept, swept.length ? 24 * 3600 * 1000 : 10 * 60 * 1000);
+  if (swept.length) await cacheSet(k, { at: now, v: swept }, 7 * 24 * 3600 * 1000);
+  else await cacheSet(k, { at: now, v: [] }, 10 * 60 * 1000); // failure marker (only reached when no good data existed)
   return swept;
 }
 
@@ -199,7 +211,8 @@ nwr(around:${m},${lat},${lon})["sport"~"${VENUE_TAGS.sport}"]["name"];
     for (const endpoint of [
       'https://overpass-api.de/api/interpreter',
       'https://overpass.kumi.systems/api/interpreter',
-      'https://overpass.osm.jp/api/interpreter'
+      'https://overpass.osm.jp/api/interpreter',
+      'https://overpass.openstreetmap.fr/api/interpreter'
     ]) {
       try {
         const r = await fetch(endpoint, {
@@ -383,9 +396,10 @@ export default async function handler(req, res) {
       // district at another radius, trimmed to the requested distance
       for (const r of [25, 10, 5]) {
         if (r === wantMiles) continue;
-        const alt = await cacheGet(`sweep|${(qGeo.district || safeLoc).toLowerCase()}|${r}`);
-        if (alt && alt.length) {
-          venues = alt.filter(v => v.miles == null || v.miles <= wantMiles).slice(0, 12);
+        const alt = await cacheGet(`sweep2|${(qGeo.district || safeLoc).toLowerCase()}|${r}`);
+        const list = alt && Array.isArray(alt.v) ? alt.v : null;
+        if (list && list.length) {
+          venues = list.filter(v => v.miles == null || v.miles <= wantMiles).slice(0, 12);
           if (venues.length) { console.log(`quick: borrowed ${r}mi sweep for ${wantMiles}mi request`); break; }
         }
       }
