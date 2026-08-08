@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Why Don't We? — Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@700;800&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{color-scheme:light;--bg:#f7f6f2;--surface:#fff;--ink:#1b2024;--ink-soft:#5c6670;--accent:#2557e0;--accent-soft:#e8eefc;--coral:#ff6752;--gem:#b8860b;--line:#e6e3db;--radius:16px}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Manrope',sans-serif;background:var(--bg);color:var(--ink);padding:28px 18px;max-width:980px;margin:0 auto}
+  h1{font-family:'Sora',sans-serif;font-size:26px;letter-spacing:-.02em}
+  h1 span{color:var(--coral)}
+  .sub{color:var(--ink-soft);font-weight:600;font-size:13px;margin:4px 0 22px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-bottom:26px}
+  .card{background:var(--surface);border:1.5px solid var(--line);border-radius:var(--radius);padding:14px}
+  .card .k{font-size:11px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-soft)}
+  .card .v{font-family:'Sora',sans-serif;font-size:26px;font-weight:800;margin-top:4px}
+  .card .d{font-size:11.5px;color:var(--ink-soft);font-weight:600;margin-top:2px}
+  .card.hero{background:var(--accent-soft);border-color:var(--accent)}
+  h2{font-family:'Sora',sans-serif;font-size:16px;margin:22px 0 10px}
+  table{width:100%;border-collapse:collapse;background:var(--surface);border:1.5px solid var(--line);border-radius:var(--radius);overflow:hidden;font-size:13px}
+  th,td{padding:9px 10px;text-align:right;border-bottom:1px solid var(--line)}
+  th{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft)}
+  th:first-child,td:first-child{text-align:left}
+  tr:last-child td{border-bottom:none}
+  .errs{background:var(--surface);border:1.5px solid var(--line);border-radius:var(--radius);padding:12px;font-family:ui-monospace,Menlo,monospace;font-size:12px}
+  .errs .e{padding:7px 4px;border-bottom:1px solid var(--line);color:#a33}
+  .errs .e:last-child{border-bottom:none}
+  .errs .t{color:var(--ink-soft);margin-right:8px}
+  .ok{color:var(--ink-soft);font-weight:700;font-size:13px;padding:6px}
+  #gate{max-width:340px;margin:80px auto;text-align:center}
+  #gate input{width:100%;font:inherit;font-weight:700;padding:11px;border-radius:12px;border:1.5px solid var(--line);margin:12px 0}
+  #gate button{font:inherit;font-weight:800;color:#fff;background:var(--accent);border:none;border-radius:12px;padding:11px 22px;cursor:pointer}
+  #board{display:none}
+  .foot{color:var(--ink-soft);font-size:11.5px;font-weight:600;margin-top:20px}
+</style>
+</head>
+<body>
+<div id="gate">
+  <h1>Why don't we<span>?</span></h1>
+  <p class="sub">Founder dashboard</p>
+  <input id="key" type="password" placeholder="Dashboard key">
+  <button onclick="saveKey()">Open</button>
+  <p class="sub" id="gateMsg"></p>
+</div>
+
+<div id="board">
+  <h1>Why don't we<span>?</span> <span style="color:var(--ink);font-size:16px;font-family:Manrope">dashboard</span></h1>
+  <p class="sub" id="stamp">Loading…</p>
+  <div class="grid" id="cards"></div>
+  <h2>Last 7 days</h2>
+  <div style="overflow-x:auto"><table id="week"></table></div>
+  <h2>Recent errors</h2>
+  <div class="errs" id="errs"></div>
+  <p class="foot">Spend figures are the app's own per-search estimates — the Anthropic console is the billing truth. Auto-refreshes every 60s.</p>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+function getKey(){ try{return localStorage.getItem('wdw_dash_key')||''}catch{return ''} }
+function saveKey(){ try{localStorage.setItem('wdw_dash_key',$('key').value.trim())}catch{}; load(); }
+function pct(a,b){ return b? Math.round(100*a/b)+'%':'—'; }
+function usd(c){ return '$'+(c||0).toFixed(2); }
+
+async function load(){
+  const key=getKey();
+  if(!key){ $('gate').style.display='block'; $('board').style.display='none'; return; }
+  let d;
+  try{
+    const r=await fetch('/api/stats?key='+encodeURIComponent(key));
+    d=await r.json();
+    if(!r.ok) throw new Error(d.error||'failed');
+  }catch(e){ $('gate').style.display='block'; $('board').style.display='none'; $('gateMsg').textContent=e.message; return; }
+  $('gate').style.display='none'; $('board').style.display='block';
+  const t=d.days[0]||{};
+  const cards=[
+    ['Searches today', t.searches||0, (t.cache_hits||0)+' from cache ('+pct(t.cache_hits||0,t.searches||0)+')','hero'],
+    ['Est. spend today', usd((t.cost_cents||0)/100), 'month: '+usd(d.monthSpendUSD),'hero'],
+    ['Active users today', t.active_users||0, (t.signins||0)+' sign-ins'],
+    ['Booking clicks', t.booking_clicks||0, 'today'],
+    ['Favourites saved', t.favs_saved||0, 'today'],
+    ['Thumbs down', t.thumbs_down||0, 'today'],
+    ['Reports', (t.report_inappropriate||0)+(t.report_dead_link||0)+(t.report_not_on||0), (t.report_not_on||0)+' wrong-page · '+(t.report_dead_link||0)+' dead'],
+    ['Link swaps', t.url_swaps||0, 'unverifiable URLs replaced'],
+    ['Engine rescues', (t.pens_down||0)+(t.topups||0), (t.pens_down||0)+' pens-down · '+(t.topups||0)+' top-ups'],
+    ['Parse failures', t.parse_fail||0, 'today']
+  ];
+  $('cards').innerHTML=cards.map(c=>`<div class="card ${c[3]||''}"><div class="k">${c[0]}</div><div class="v">${c[1]}</div><div class="d">${c[2]||''}</div></div>`).join('');
+  const cols=['date','searches','cache_hits','deep_runs','active_users','signins','booking_clicks','favs_saved','thumbs_down','url_swaps','parse_fail'];
+  const heads=['Date','Searches','Cache hits','Deep runs','Users','Sign-ins','Clicks','Favs','👎','Swaps','Fails'];
+  $('week').innerHTML='<tr>'+heads.map(h=>`<th>${h}</th>`).join('')+'</tr>'+
+    d.days.map(r=>'<tr>'+cols.map((c,i)=>`<td>${i? (r[c]||0): r[c]}</td>`).join('')+
+    `<td>${usd((r.cost_cents||0)/100)}</td></tr>`).join('').replace('<th>Fails</th>','<th>Fails</th><th>Est. $</th>');
+  $('errs').innerHTML=d.errors.length
+    ? d.errors.map(e=>`<div class="e"><span class="t">${e.t.slice(5,16).replace('T',' ')}</span>${e.m}</div>`).join('')
+    : '<div class="ok">No errors recorded today or yesterday 🎉</div>';
+  $('stamp').textContent='Updated '+new Date(d.generated).toLocaleTimeString('en-GB')+' · Tunbridge Wells & Uckfield warming daily';
+}
+load();
+setInterval(load,60000);
+</script>
+</body>
+</html>
