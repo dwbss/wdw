@@ -41,9 +41,10 @@ async function getSweep(loc, geo, distMiles) {
   if (!geo || geo.lat == null) return [];
   const k = `sweep|${(geo.district || loc).toLowerCase()}|${distMiles}`;
   const hit = await cacheGet(k);
-  if (hit) return hit;
+  if (hit) return hit; // note: a cached [] means "recently failed — don't hammer the mirrors"
   const swept = await sweepVenues(geo.lat, geo.lon, distMiles);
-  if (swept.length) await cacheSet(k, swept, 24 * 3600 * 1000);
+  // successes live a day; failures are remembered briefly so retries back off
+  await cacheSet(k, swept, swept.length ? 24 * 3600 * 1000 : 10 * 60 * 1000);
   return swept;
 }
 
