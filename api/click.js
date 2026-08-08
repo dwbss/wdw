@@ -3,11 +3,14 @@
 // in the logs alongside thumbs, reports and favourites for later learning.
 
 import { getSession } from './_kv.js';
+import { bump, seenUser } from './_stats.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'method not allowed' });
   const b = req.body || {};
   const session = await getSession(req).catch(() => null);
+  bump('booking_clicks');
+  if (session) seenUser(session.uid);
   console.log(JSON.stringify({
     event: 'booking_click',
     uid: session ? session.uid : null,

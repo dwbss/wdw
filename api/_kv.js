@@ -71,6 +71,16 @@ export async function kvSet(k, v, ttlSec) {
     console.error('kv set: no storage configured');
   } catch (e) { console.error('kv set:', e.message); }
 }
+// generic command (HINCRBY, SADD, LPUSH...) for counters and lists
+export async function kvCmd(parts) {
+  try {
+    const c = await getClient();
+    if (c) return await withTimeout(c.sendCommand(parts.map(String)), 1500);
+    if (KV_URL && KV_TOKEN) { const d = await restCmd(parts.map(String)); return d ? d.result : null; }
+  } catch (e) { console.error('kv cmd:', e.message); }
+  return null;
+}
+
 export async function kvDel(k) {
   try {
     const c = await getClient();

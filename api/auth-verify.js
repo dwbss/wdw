@@ -2,6 +2,7 @@
 
 import { kvGet, kvSet, kvDel } from './_kv.js';
 import crypto from 'node:crypto';
+import { bump, seenUser } from './_stats.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'method not allowed' });
@@ -24,5 +25,6 @@ export default async function handler(req, res) {
   const uid = crypto.createHash('sha256').update(email).digest('hex').slice(0, 12);
   await kvSet(`session|${token}`, { email, uid }, 90 * 24 * 3600); // 90 days
   console.log(JSON.stringify({ event: 'signed_in', uid }));
+  bump('signins'); seenUser(uid);
   return res.status(200).json({ token, email });
 }

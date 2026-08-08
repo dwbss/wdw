@@ -3,6 +3,7 @@
 // real users get instant results.
 
 import { WARM_AREAS } from './_areas.js';
+import { bump, recErr } from './_stats.js';
 
 export const maxDuration = 60;
 
@@ -30,5 +31,7 @@ export default async function handler(req, res) {
 
   const results = await Promise.all(jobs);
   console.log(`warm run (${day}):`, JSON.stringify(results));
+  bump('warm_runs');
+  results.filter(r => !r.ok).forEach(r => recErr(`warm failed: ${r.loc} (${r.err || 'no results'})`));
   return res.status(200).json({ day, results });
 }

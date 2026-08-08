@@ -1,6 +1,7 @@
 // api/favs.js — favourites that follow the signed-in user across devices.
 
 import { getSession, kvGet, kvSet } from './_kv.js';
+import { bump, seenUser } from './_stats.js';
 
 export default async function handler(req, res) {
   const session = await getSession(req);
@@ -29,6 +30,7 @@ export default async function handler(req, res) {
     }));
     await kvSet(key, items, 365 * 24 * 3600);
     console.log(JSON.stringify({ event: 'favs_saved', uid: session.uid, count: items.length, at: new Date().toISOString() }));
+    bump('favs_saved'); seenUser(session.uid);
     return res.status(200).json({ ok: true, count: items.length });
   }
   return res.status(405).json({ error: 'method not allowed' });

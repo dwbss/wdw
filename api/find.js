@@ -5,6 +5,7 @@
 import { VENUES } from './_venues.js';
 import { SOURCE_PACKS } from './_sources.js';
 import { kvGet as storeGet, kvSet as storeSet, kvAvailable, getSession } from './_kv.js';
+import { bump, seenUser, recErr } from './_stats.js';
 
 // Allow up to 60s — the multi-stage search needs longer than Vercel's 10s default
 export const maxDuration = 60;
@@ -130,7 +131,9 @@ async function callClaude(prompt, tools, withFetchBeta) {
 
   // "Pens down": if the dig ran out of turns (or never emitted the list),
   // force a final answer from what's already been gathered — no more tools.
+  let wrapped = false;
   if (last && !last.error && (last.stop_reason === 'pause_turn' || last.stop_reason === 'max_tokens' || !parseItems(collected))) {
+    wrapped = true;
     try {
       const wrapMsgs = lastAppended
         ? [...messages, { role: 'user', content: 'STOP searching. Using ONLY what you have already gathered, output the COMPLETE final raw JSON array now, from the opening [ to the closing ] — valid JSON, nothing else.' }]
@@ -156,7 +159,7 @@ async function callClaude(prompt, tools, withFetchBeta) {
   // rough cost estimate at Sonnet rates ($3/M in, $15/M out, $0.30/M cache read, $3.75/M cache write)
   const usd = (cost.in * 3 + cost.out * 15 + cost.cacheRead * 0.3 + cost.cacheWrite * 3.75) / 1e6;
   console.log(`search cost ~$${usd.toFixed(3)} (tokens in=${cost.in} out=${cost.out} cached=${cost.cacheRead})`);
-  return { text: collected, stop_reason: last ? last.stop_reason : 'unknown' };
+  return { text: collected, stop_reason: last ? last.stop_reason : 'unknown', usd, pensDown: wrapped };
 }
 
 // Sweep the selected radius for family venues via OpenStreetMap's Overpass API
@@ -342,6 +345,9 @@ export default async function handler(req, res) {
   // Feedback loop: every signal lands in the logs, with the anonymous user
   // id when signed in — the raw material for per-family memory later.
   const sess = (dismissed || reported) ? await getSession(req).catch(() => null) : null;
+  if (sess) seenUser(sess.uid);
+  if (dismissed && typeof dismissed === 'string') bump('thumbs_down');
+  if (reported && typeof reported === 'string') bump('report_' + (safeReason || 'other'));
   if (dismissed && typeof dismissed === 'string') {
     console.log(JSON.stringify({
       event: 'thumbs_down',
@@ -396,7 +402,7 @@ export default async function handler(req, res) {
   const fullKey = `res3|${searchMode}|${normLoc}|${cost}|${dist}|${setting}|${targetDate.toDateString()}|${exHash}`;
   if (isCacheable) {
     const hit = await cacheGet(fullKey);
-    if (hit) { console.log(`cache HIT: ${fullKey.slice(0, 80)}`); return res.status(200).json({ items: hit, cached: true }); }
+    if (hit) { console.log(`cache HIT: ${fullKey.slice(0, 80)}`); bump('searches'); bump('cache_hits'); return res.status(200).json({ items: hit, cached: true }); }
   }
 
   const REASON_LINES = {
@@ -506,6 +512,7 @@ Keep it compact. Only include options genuinely available ${dayWord}.`;
     };
 
     const t0 = Date.now();
+    bump('searches'); bump(isFast ? 'fast_runs' : 'deep_runs');
     let data = await callClaude(prompt, isFast ? [searchTool] : [searchTool, fetchTool], !isFast);
     if (data.error) {
       // If the fetch tool is ever rejected (beta changes etc.), degrade
@@ -523,9 +530,12 @@ Keep it compact. Only include options genuinely available ${dayWord}.`;
 
     const text = data.text || '';
 
+    if (data.usd) bump('cost_cents', data.usd * 100);
+    if (data.pensDown) bump('pens_down');
     let items = parseItems(text);
     if (!items || items.length === 0) {
       console.error('parse: no usable JSON. stop_reason=', data.stop_reason, '| tail:', text.slice(-300));
+      bump('parse_fail'); recErr('parse fail: ' + text.slice(-120));
       return res.status(502).json({ error: 'No results came back — try again' });
     }
 
@@ -553,6 +563,8 @@ Respond with ONLY a raw JSON array of ${missing + 1} objects with keys: "name","
             if (items.length >= n) break;
           }
           console.log(`top-up: batch was short, now ${items.length}/${n} after follow-up`);
+          bump('topups');
+          if (topData.usd) bump('cost_cents', topData.usd * 100);
         }
       } catch (e) { console.error('top-up failed:', e.message); }
     } else if (items.length < n && n > 1) {
@@ -594,7 +606,7 @@ Respond with ONLY a raw JSON array of ${missing + 1} objects with keys: "name","
           }
         } catch { /* unreachable — keep original */ }
       }));
-      if (swapped) console.log(`url verify: swapped ${swapped}/${items.length} unverifiable links for targeted searches`);
+      if (swapped) { console.log(`url verify: swapped ${swapped}/${items.length} unverifiable links for targeted searches`); bump('url_swaps', swapped); }
     }
 
     const clean = items.slice(0, n).map(it => ({
@@ -611,7 +623,7 @@ Respond with ONLY a raw JSON array of ${missing + 1} objects with keys: "name","
 
     const ttlMs = (safeExcluded.length === 0 && safeDepth === 0) ? 10 * 3600 * 1000 : 2 * 3600 * 1000;
     if (isCacheable && clean.length >= n) await cacheSet(fullKey, clean, ttlMs);
-    else if (isCacheable) console.log(`partial batch (${clean.length}/${n}) — served but NOT cached`);
+    else if (isCacheable) { console.log(`partial batch (${clean.length}/${n}) — served but NOT cached`); bump('partial_batches'); }
     return res.status(200).json({ items: clean });
   } catch (err) {
     return res.status(500).json({ error: 'Something went wrong — try again' });
