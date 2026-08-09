@@ -514,7 +514,7 @@ ${vocabLine}
 ${seedLine}
 ${isFast ? '' : gemHunt}
 ${excludedLine}
-URL RULE: every "url" must be the specific detail page for that exact item — the page a parent lands on and immediately sees THIS event or venue's details, times and booking. Copy it VERBATIM from your search or fetch results; never construct or guess a URL from memory. NEVER a homepage, never a generic what's-on or events listing page. If you only saw the item on a listing page, run one more search for its dedicated page; only if none exists may you use the most specific page that names it.
+URL RULE: a bare homepage URL (path "/") is NEVER acceptable for an event — good event URLs usually contain /event, /events, /whats-on, or the item's own name in the path. Every "url" must be the specific detail page for that exact item — the page a parent lands on and immediately sees THIS event or venue's details, times and booking. Copy it VERBATIM from your search or fetch results; never construct or guess a URL from memory. NEVER a homepage, never a generic what's-on or events listing page. If you only saw the item on a listing page, run one more search for its dedicated page; only if none exists may you use the most specific page that names it.
 HARD RULE: no two options may share the same category — one swimming pool, one bowling alley, one farm park etc. per list, never two.
 Respond with ONLY a raw JSON array (no markdown, no commentary) of the ${n === 1 ? 1 : n + 2} best options, ranked best first, each a DIFFERENT category. Each object has exactly these keys:
 "name" (string), "category" (2-3 word activity type, e.g. "swimming pool", "bowling", "farm park", "fete", "museum"), "blurb" (string, max 18 words, why it's great today), "cost" ("Free" or short price like "£8 adult"), "setting" ("Indoor"|"Outdoor"|"Both"), "area" (short place name), "url" (see URL RULE above), "time" (short like "10:00–16:00"), "once" (true ONLY if it runs ${dayWord} or a limited stretch of days — never for permanent venues), "gem" (true if a small one-off low-publicity local find, else false).
@@ -604,32 +604,77 @@ Respond with ONLY a raw JSON array of ${missing + 1} objects with keys: "name","
     });
 
     // sanitise before returning
-    // TRUST BUT VERIFY: fetch each URL and confirm the page mentions the
-    // item. Homepage/generic links get swapped for a targeted search that
-    // lands one click from the real page. Unreachable pages keep the benefit
-    // of the doubt (many legit sites block bots).
+    // TRUST BUT VERIFY v2: a link must prove it's about THIS item, not just
+    // its venue or town. Distinctive-word matching (place names and generic
+    // words don't count), homepages face a higher bar, and failures get one
+    // cheap repair pass before falling back to a targeted search link.
     if (items.length > 1 && (Date.now() - t0) < 45000) {
-      let swapped = 0;
-      await Promise.all(items.map(async it => {
-        if (!it || !it.url || !/^https?:\/\//i.test(it.url)) return;
+      const geoWords = new Set(`${safeLoc} ${(geo && geo.district) || ''} ${(geo && geo.county) || ''}`
+        .toLowerCase().split(/[^a-z0-9]+/).filter(w => w.length > 3));
+      const GENERIC = new Set(['park','farm','centre','center','club','house','garden','gardens','wood','woods','forest','museum','castle','hall','show','fair','fete','festival','family','event','events','summer','winter','spring','national','trust','leisure','their','with','this','that','from']);
+      const distinctive = it => String(it.name || '').toLowerCase().split(/[^a-z0-9]+/)
+        .filter(w => w.length > 3 && !geoWords.has(w) && !GENERIC.has(w));
+
+      // returns 'ok' | 'bad' | 'unknown'
+      const judge = async it => {
+        if (!it || !it.url || !/^https?:\/\//i.test(it.url)) return 'unknown';
+        let rootPath = false;
+        try { rootPath = new URL(it.url).pathname.replace(/\/+$/, '') === ''; } catch {}
+        if (rootPath && it.once) return 'bad'; // a today-only event never lives at a bare homepage
         try {
           const ctl = new AbortController();
           const tt = setTimeout(() => ctl.abort(), 3000);
           const r = await fetch(it.url, { redirect: 'follow', signal: ctl.signal,
             headers: { 'user-agent': 'Mozilla/5.0 (compatible; WhyDontWe/1.0; +https://www.whydontwe.uk)' } });
           clearTimeout(tt);
-          if (!r.ok) return; // can't judge — keep
+          if (!r.ok) return 'unknown'; // bot-blocked etc — benefit of the doubt
           const html = (await r.text()).slice(0, 150000).toLowerCase();
-          const words = String(it.name || '').toLowerCase().split(/[^a-z0-9]+/).filter(w => w.length > 3);
-          if (!words.length) return;
-          const hits = words.filter(w => html.includes(w)).length;
-          if (hits < Math.min(2, words.length)) {
-            it.url = 'https://www.google.com/search?q=' + encodeURIComponent('"' + it.name + '" ' + (it.area || safeLoc));
-            swapped++;
+          const dw = distinctive(it);
+          if (dw.length) {
+            const hits = dw.filter(w => html.includes(w)).length;
+            const need = rootPath ? Math.min(3, dw.length) : Math.min(2, dw.length);
+            return hits >= need ? 'ok' : 'bad';
           }
-        } catch { /* unreachable — keep original */ }
-      }));
-      if (swapped) { console.log(`url verify: swapped ${swapped}/${items.length} unverifiable links for targeted searches`); bump('url_swaps', swapped); }
+          // no distinctive words (name is all place/generic): fall back to any-words check
+          const words = String(it.name || '').toLowerCase().split(/[^a-z0-9]+/).filter(w => w.length > 3);
+          return words.filter(w => html.includes(w)).length >= Math.min(2, words.length) ? 'ok' : 'bad';
+        } catch { return 'unknown'; }
+      };
+
+      const verdicts = await Promise.all(items.map(judge));
+      let bad = items.filter((it, i) => verdicts[i] === 'bad');
+
+      // REPAIR PASS: one small search call to find the real detail pages
+      if (bad.length && isCacheable && (Date.now() - t0) < 38000) {
+        try {
+          const repairPrompt = `Find the official detail-page URL for each item below (${dayWord}, ${today}, near ${safeLoc} UK). Respond with ONLY a raw JSON array of objects with keys "name" (copied exactly) and "url". Each url must be copied VERBATIM from your search results and must be the specific page for that exact item — never a bare homepage, never a generic what's-on index.
+${bad.map((it, i) => `${i + 1}) ${it.name} — ${it.area || safeLoc}`).join('\n')}`;
+          const rep = await callClaude(repairPrompt, [{ ...searchTool, max_uses: 3 }], false);
+          if (!rep.error) {
+            if (rep.usd) bump('cost_cents', rep.usd * 100);
+            const fixes = parseItems(rep.text || '') || [];
+            const byName = new Map(fixes.filter(f => f && f.url).map(f => [String(f.name || '').toLowerCase().trim(), String(f.url)]));
+            const candidates = bad.filter(it => byName.has(String(it.name || '').toLowerCase().trim()));
+            candidates.forEach(it => { it._repairUrl = byName.get(String(it.name || '').toLowerCase().trim()); });
+            const recheck = await Promise.all(candidates.map(it => judge({ ...it, url: it._repairUrl })));
+            let repaired = 0;
+            candidates.forEach((it, i) => {
+              if (recheck[i] !== 'bad') { it.url = it._repairUrl; repaired++; bad = bad.filter(b => b !== it); }
+              delete it._repairUrl;
+            });
+            if (repaired) { console.log(`url repair: fixed ${repaired} links via follow-up search`); bump('url_repairs', repaired); }
+          }
+        } catch (e) { console.error('url repair failed:', e.message); }
+      }
+
+      // whatever's still bad gets the never-strand-anyone fallback
+      if (bad.length) {
+        bad.forEach(it => {
+          it.url = 'https://www.google.com/search?q=' + encodeURIComponent('"' + it.name + '" ' + (it.area || safeLoc));
+        });
+        console.log(`url verify: ${bad.length}/${items.length} links swapped for targeted searches`);
+        bump('url_swaps', bad.length);
+      }
     }
 
     const clean = items.slice(0, n).map(it => ({
