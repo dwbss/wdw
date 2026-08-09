@@ -15,8 +15,9 @@ export default async function handler(req, res) {
   }
 
   const day = (req.query && req.query.day) === 'tomorrow' ? 'tomorrow' : 'today';
-  const base = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null;
-  if (!base) return res.status(500).json({ error: 'no base url' });
+  // call back via the PUBLIC domain — Vercel's internal deployment URLs
+  // are auth-protected and 401 any self-fetch
+  const base = process.env.PUBLIC_BASE_URL || 'https://www.whydontwe.uk';
 
   // sequential, so parallel deep searches can't rate-limit each other
   const results = [];
