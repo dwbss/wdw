@@ -116,6 +116,7 @@ async function callClaude(prompt, tools, withFetchBeta) {
   let cost = { in: 0, out: 0, cacheRead: 0, cacheWrite: 0 };
   const tStart = Date.now();
   const BUDGET_MS = 34000; // wall-clock cap on tool turns; pens-down wraps whatever's gathered
+  let backoffUsed = false;
   for (let i = 0; i < 3; i++) {
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -123,6 +124,13 @@ async function callClaude(prompt, tools, withFetchBeta) {
       body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 4200, messages, tools })
     });
     last = await r.json();
+    if (last.error && !backoffUsed && /rate_limit|overloaded/i.test(String(last.error.type || '') + String(last.error.message || ''))) {
+      backoffUsed = true;
+      console.log('claude rate-limited — backing off 18s and retrying');
+      await new Promise(s => setTimeout(s, 18000));
+      i--;
+      continue;
+    }
     if (last.error) return { error: last.error };
     collected += (last.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
     const u = last.usage || {};

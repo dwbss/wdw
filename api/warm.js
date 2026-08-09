@@ -5,7 +5,7 @@
 import { WARM_AREAS } from './_areas.js';
 import { bump, recErr } from './_stats.js';
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 export default async function handler(req, res) {
   // If a CRON_SECRET env var is set, require it (Vercel sends it automatically)
@@ -18,18 +18,21 @@ export default async function handler(req, res) {
   const base = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null;
   if (!base) return res.status(500).json({ error: 'no base url' });
 
-  const jobs = WARM_AREAS.slice(0, 6).map(a =>
-    fetch(`${base}/api/find`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ loc: a.loc, cost: 'either', dist: '10', setting: 'either', day })
-    })
-      .then(r => r.json())
-      .then(d => ({ loc: a.loc, ok: !d.error, results: (d.items || []).length, wasCached: !!d.cached }))
-      .catch(e => ({ loc: a.loc, ok: false, err: e.message }))
-  );
-
-  const results = await Promise.all(jobs);
+  // sequential, so parallel deep searches can't rate-limit each other
+  const results = [];
+  for (const a of WARM_AREAS.slice(0, 6)) {
+    try {
+      const r = await fetch(`${base}/api/find`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ loc: a.loc, cost: 'either', dist: '10', setting: 'either', day })
+      });
+      const d = await r.json();
+      results.push({ loc: a.loc, ok: !d.error, results: (d.items || []).length, wasCached: !!d.cached, err: d.error || undefined });
+    } catch (e) {
+      results.push({ loc: a.loc, ok: false, err: e.message });
+    }
+  }
   console.log(`warm run (${day}):`, JSON.stringify(results));
   bump('warm_runs');
   results.filter(r => !r.ok).forEach(r => recErr(`warm failed: ${r.loc} (${r.err || 'no results'})`));
