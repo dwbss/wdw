@@ -155,6 +155,7 @@
     padding:16px;margin-bottom:12px;box-shadow:0 6px 18px -14px rgba(27,32,36,.25);
   }
   .card.gem{border-color:var(--gem);background:linear-gradient(0deg,var(--gem-soft) 0,var(--surface) 55%)}
+  .card.once{border-color:#e04f2f;background:linear-gradient(0deg,#fdeeea 0,var(--surface) 55%)}
   .card .top{display:flex;gap:10px;align-items:flex-start;justify-content:space-between}
   .card h3{font-size:16.5px;font-weight:800;line-height:1.3;letter-spacing:-.01em}
   .once-badge{
@@ -393,7 +394,7 @@
 
   <div class="stage" id="stage" aria-live="polite"></div>
 
-  <footer>Results are found live on the web for today's date. Always check times and availability on the venue's page before heading out. <span style="opacity:.45">· wdw-20260808-d</span></footer>
+  <footer>Results are found live on the web for today's date. Always check times and availability on the venue's page before heading out. <span style="opacity:.45">· wdw-20260808-e</span></footer>
 <div class="modal-backdrop" id="authModal" hidden>
   <div class="modal" role="dialog" aria-label="Sign in">
     <h3 id="authTitle">Remember me retains Favourites and other preferences</h3>
@@ -423,7 +424,7 @@
 </div>
 
 <script>
-const BUILD='wdw-20260808-d';
+const BUILD='wdw-20260808-e';
 console.log('Why Don\'t We? build:', BUILD);
 const ROW = 38;
 const SPINNERS = {
@@ -726,10 +727,10 @@ function cardHtml(it){
   const saved=(typeof FAVS!=='undefined')&&FAVS.has(it.name);
   const freeClass=/free/i.test(it.cost||'')?'tag free':'tag';
   const url=safeUrl(it.url);
-  return `<div class="card ${it.gem?'gem':''}" data-name="${escapeHtml(it.name||'')}">
+  return `<div class="card ${it.once?'once':(it.gem?'gem':'')}" data-name="${escapeHtml(it.name||'')}">
     <div class="top">
       <h3>${escapeHtml(it.name||'Mystery outing')}</h3>
-      ${it.gem?'<span class="gem-badge">✨ Hidden gem</span>':''}
+      ${it.once?'<span class="once-badge">⏳ Limited time</span>':(it.gem?'<span class="gem-badge">✨ Hidden gem</span>':'')}
     </div>
     <p>${escapeHtml(it.blurb||'')}</p>
     <div class="meta">
