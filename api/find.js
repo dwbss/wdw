@@ -421,7 +421,7 @@ export default async function handler(req, res) {
   const normLoc = ((geoForKey && geoForKey.district) || safeLoc).toLowerCase();
   const exHash = (excluded || []).slice().sort().join('|').slice(0, 200);
   const isCacheable = !dismissed && !reported && count !== 1;
-  const fullKey = `res3|${searchMode}|${normLoc}|${cost}|${dist}|${setting}|${targetDate.toDateString()}|${exHash}`;
+  const fullKey = `res4|${searchMode}|${normLoc}|${cost}|${dist}|${setting}|${targetDate.toDateString()}|${exHash}`;
   if (isCacheable) {
     const hit = await cacheGet(fullKey);
     if (hit) { console.log(`cache HIT: ${fullKey.slice(0, 80)}`); bump('searches'); bump('cache_hits'); return res.status(200).json({ items: hit, cached: true }); }
@@ -503,6 +503,7 @@ STAGE 3 — HUNT the gaps with targeted searches using event vocabulary and this
   const prompt = `You are the results engine for "Why Don't We?", a same-day family day-out finder.
 The search is for ${dayWord}, ${today}. Location: ${safeLoc}, UK. Find things a family with kids aged 3 to 12 can actually do on that day.
 Criteria: ${COSTS[cost]}; ${DISTS[dist]} of ${safeLoc}; ${SETTINGS[setting]} preferred.
+${isFast ? '' : `PRIME DIRECTIVE — TIME-LIMITED FIRST: the single most valuable result is one that exists ONLY ${dayWord} or this weekend — a festival, fair, show, or one-off event. Your FIRST search must be "${safeLoc} what's on this weekend" or "${safeLoc} festival fair ${dayWord}". If ANY time-limited family event within range is verifiably on ${dayWord}, it MUST appear in the results, ranked FIRST, with "once": true. Permanent venues fill the remaining slots. (If genuinely nothing time-limited is on, five great venues is the correct answer — never invent scarcity.)`}
 ${geoLine}
 ${sweepLine}
 ${isFast ? fastBrief : blendLine}
