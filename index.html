@@ -393,7 +393,7 @@
 
   <div class="stage" id="stage" aria-live="polite"></div>
 
-  <footer>Results are found live on the web for today's date. Always check times and availability on the venue's page before heading out. <span style="opacity:.45">· wdw-20260808-c</span></footer>
+  <footer>Results are found live on the web for today's date. Always check times and availability on the venue's page before heading out. <span style="opacity:.45">· wdw-20260808-d</span></footer>
 <div class="modal-backdrop" id="authModal" hidden>
   <div class="modal" role="dialog" aria-label="Sign in">
     <h3 id="authTitle">Remember me retains Favourites and other preferences</h3>
@@ -423,7 +423,7 @@
 </div>
 
 <script>
-const BUILD='wdw-20260808-c';
+const BUILD='wdw-20260808-d';
 console.log('Why Don\'t We? build:', BUILD);
 const ROW = 38;
 const SPINNERS = {
@@ -572,9 +572,8 @@ function speculate(){
 }
 {
   const locInput=document.getElementById('loc');
-  let specT=null;
-  locInput.addEventListener('input',()=>{ clearTimeout(specT); specT=setTimeout(speculate,2000); });
-  locInput.addEventListener('blur',()=>{ clearTimeout(specT); speculate(); });
+  // speculate only on high-certainty signals — never mid-typing
+  locInput.addEventListener('blur',()=>{ if(locInput.value.trim().length>=4) speculate(); });
 }
 
 document.querySelectorAll('.dayrow .day').forEach(b=>{
